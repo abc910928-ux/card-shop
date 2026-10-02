@@ -7,6 +7,7 @@ language: 日文
 condition: 全新
 price: 3200
 stock: 1
+payments: [transfer]
 images: ["../../assets/products/tc-02-treasure-box.jpg"]
 addedAt: 2026-10-02
 featured: true
