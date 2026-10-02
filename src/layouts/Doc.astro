@@ -1,0 +1,25 @@
+---
+// 條款、說明類的 Markdown 頁面用這個版型（src/pages/**/*.md 的 layout）
+import Base from "./Base.astro";
+
+interface Props {
+  frontmatter: { title: string; description?: string; updated?: string; draft?: boolean };
+}
+const { frontmatter } = Astro.props;
+---
+
+<Base title={frontmatter.title} description={frontmatter.description}>
+  <article class="doc mx-auto max-w-3xl px-4 py-10 sm:px-6">
+    {
+      frontmatter.draft && (
+        <div class="mb-6 rounded-xl border border-accent bg-accent/15 px-4 py-3 text-sm">
+          <b>草稿</b>：尚未生效，正式使用前建議請律師或消保官審閱。
+          <mark>黃底</mark>的數字可以依你的需求調整。
+        </div>
+      )
+    }
+    <h1>{frontmatter.title}</h1>
+    {frontmatter.updated && <p class="doc-meta">版本日期：{frontmatter.updated}</p>}
+    <slot />
+  </article>
+</Base>

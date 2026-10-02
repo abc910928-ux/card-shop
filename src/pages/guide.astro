@@ -3,6 +3,7 @@ import Base from "../layouts/Base.astro";
 import { shippingMethods, shop } from "../config/shop";
 import { coverageOf, feeLabel, quote, rateCoverage, tiersCoverage } from "../lib/shipping";
 import { ntd } from "../lib/format";
+import { url } from "../lib/url";
 
 const tiers = tiersCoverage().tiers;
 const tcat = rateCoverage();
@@ -170,8 +171,9 @@ const conditionDefs = [
       <h2 class="text-xl font-bold">出貨與退換</h2>
       <ul class="mt-3 list-disc space-y-1.5 pl-5 text-sm text-ink-soft">
         <li>{shop.leadTime}，單卡一律卡套＋卡磚＋防水包裝。</li>
-        <li>收到商品與照片不符，請於 3 天內 LINE 聯絡並附開箱照片或影片。</li>
-        <li>卡牌屬個人收藏品，非商品瑕疵恕不接受退換。</li>
+        <li>收到商品後 7 天內可以不說明理由退貨，退貨運費由本店負擔；請保持收到時的狀態（原盒保留收縮膜、卡包不拆封）。</li>
+        <li>商品與照片不符或運送損壞，請盡快 LINE 聯絡並附開箱照片或影片，建議收貨時錄開箱影片。</li>
+        <li>預購的到貨付款期限、取消與棄單規則，請見<a href={url("/terms/preorder/")} class="underline">預購服務條款</a>。</li>
       </ul>
     </section>
 
