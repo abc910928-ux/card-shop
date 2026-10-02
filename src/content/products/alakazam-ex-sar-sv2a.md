@@ -1,0 +1,16 @@
+---
+name: 胡地ex
+category: 單卡
+game: 寶可夢
+set: sv2a ポケモンカード151
+number: 203/165
+rarity: SAR
+language: 日文
+condition: 輕微瑕疵
+price: 980
+stock: 2
+images: []
+myshipUrl: https://myship.7-11.com.tw/
+addedAt: 2026-09-21
+---
+正面左上有一處小白點，其餘良好，價格已反映卡況。

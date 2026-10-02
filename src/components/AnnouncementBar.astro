@@ -1,0 +1,11 @@
+---
+import { shop } from "../config/shop";
+// 內容重複兩次，讓跑馬燈無縫循環
+const items = [...shop.announcements, ...shop.announcements];
+---
+
+<div class="overflow-hidden bg-accent text-accent-ink">
+  <div class="marquee flex w-max gap-12 whitespace-nowrap py-1.5 text-xs font-medium">
+    {items.map((t) => <span>★ {t}</span>)}
+  </div>
+</div>

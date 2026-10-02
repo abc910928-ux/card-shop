@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+/* 色票：改這裡就能換整站配色 */
+:root {
+  --bg: #f2f3f5;
+  --surface: #ffffff;
+  --ink: #101217;
+  --ink-soft: #2a2e37;
+  --muted: #6b7180;
+  --line: #e2e4e9;
+  --accent: #ffc400; /* 主按鈕、強調 */
+  --accent-ink: #101217;
+  --sale: #e5383b; /* 特價 */
+  --ok: #15803d;
+  --gold-1: #f9e08b;
+  --gold-2: #d4a017;
+  --silver-1: #f1f3f6;
+  --silver-2: #a7adb8;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-sale: var(--sale);
+  --color-ok: var(--ok);
+  --font-sans: "Noto Sans TC", system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Noto Sans TC", system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 稀有度徽章 */
+.badge-top {
+  background: linear-gradient(135deg, var(--gold-1), var(--gold-2));
+  color: #3b2a00;
+}
+.badge-mid {
+  background: linear-gradient(135deg, var(--silver-1), var(--silver-2));
+  color: #1f2430;
+}
+.badge-base {
+  background: var(--surface);
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+}
+
+/* 公告條跑馬燈 */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee {
+  animation: marquee 28s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .marquee { animation: none; }
+}

@@ -1,0 +1,130 @@
+---
+import Base from "../layouts/Base.astro";
+import { ProductCard } from "../components/ProductCard";
+import { CardArt } from "../components/CardArt";
+import { getProductViews } from "../lib/catalog";
+import { categories } from "../lib/types";
+import { insurance, shippingMethods } from "../config/shop";
+import { ntd } from "../lib/format";
+import { url } from "../lib/url";
+
+const products = await getProductViews();
+const inStock = products.filter((p) => p.stock > 0);
+const latest = inStock.slice(0, 8);
+const featured = inStock.filter((p) => p.featured).slice(0, 4);
+const fan = (featured.length >= 3 ? featured : inStock).slice(0, 3);
+
+const catIcon: Record<string, string> = {
+  單卡: "🂠",
+  "原盒・擴充包": "▣",
+  鑑定卡: "◈",
+  周邊: "✦",
+};
+---
+
+<Base>
+  <!-- Hero -->
+  <section class="border-b border-line bg-surface">
+    <div class="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 md:grid-cols-[1.1fr_1fr] md:py-16">
+      <div>
+        <p class="font-display text-xs font-bold uppercase tracking-[0.25em] text-muted">
+          Singles · Sealed · Graded
+        </p>
+        <h1 class="mt-3 text-3xl font-bold leading-tight sm:text-5xl">
+          今天想收<br />哪一張卡？
+        </h1>
+        <p class="mt-4 max-w-md text-sm leading-relaxed text-muted sm:text-base">
+          單卡、原盒、鑑定卡一站找齊。每張卡都是實拍、標明卡況，7-11 店到店或黑貓宅配，高價卡可加保。
+        </p>
+        <form action={url("/shop/")} method="get" class="mt-6 flex max-w-md gap-2">
+          <input
+            type="search"
+            name="q"
+            placeholder="輸入卡名或卡號，例如 205/165"
+            class="min-w-0 flex-1 rounded-xl border border-line bg-bg px-4 py-3 text-sm outline-none focus:border-ink"
+          />
+          <button class="rounded-xl bg-ink px-5 text-sm font-medium text-white">搜尋</button>
+        </form>
+      </div>
+
+      <!-- 精選卡片扇形展示 -->
+      <div class="relative mx-auto h-64 w-full max-w-sm sm:h-80" aria-hidden="true">
+        {
+          fan.map((p, i) => (
+            <a
+              href={p.href}
+              class="absolute left-1/2 top-1/2 aspect-[63/88] w-36 overflow-hidden rounded-xl bg-gradient-to-b from-slate-50 to-slate-200 shadow-xl transition hover:z-10 hover:-translate-y-2 sm:w-44"
+              style={`transform: translate(-50%, -50%) translateX(${(i - 1) * 70}px) rotate(${(i - 1) * 10}deg); z-index: ${i === 1 ? 2 : 1};`}
+            >
+              {p.thumb ? (
+                <img src={p.thumb} alt="" class="h-full w-full object-contain p-2" />
+              ) : (
+                <CardArt {...p} />
+              )}
+            </a>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- 分類捷徑 -->
+  <section class="mx-auto max-w-7xl px-4 pt-10 sm:px-6">
+    <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+      {
+        categories.map((c) => {
+          const n = products.filter((p) => p.category === c && p.stock > 0).length;
+          return (
+            <a
+              href={url(`/shop/?category=${encodeURIComponent(c)}`)}
+              class="group flex items-center gap-3 rounded-xl border border-line bg-surface p-4 transition hover:border-ink"
+            >
+              <span class="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-bg text-xl group-hover:bg-accent">
+                {catIcon[c]}
+              </span>
+              <span>
+                <span class="block font-medium">{c}</span>
+                <span class="text-xs text-muted">{n} 件現貨</span>
+              </span>
+            </a>
+          );
+        })
+      }
+    </div>
+  </section>
+
+  <!-- 新上架 -->
+  <section class="mx-auto max-w-7xl px-4 pt-12 sm:px-6">
+    <div class="mb-4 flex items-end justify-between">
+      <h2 class="text-xl font-bold sm:text-2xl">新上架</h2>
+      <a href={url("/shop/")} class="text-sm text-muted hover:text-ink">看全部 →</a>
+    </div>
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+      {latest.map((p) => <ProductCard p={p} />)}
+    </div>
+  </section>
+
+  <!-- 寄送方式 -->
+  <section class="mx-auto max-w-7xl px-4 pt-12 sm:px-6">
+    <div class="grid gap-3 md:grid-cols-3">
+      {
+        shippingMethods.map((m) => (
+          <div class="rounded-xl border border-line bg-surface p-5">
+            <div class="text-sm text-muted">{m.short}</div>
+            <div class="mt-1 font-display text-2xl font-bold">{ntd(m.fee)}</div>
+            <div class="mt-1 text-xs text-muted">{m.feeNote}</div>
+          </div>
+        ))
+      }
+      <div class="rounded-xl border border-ink bg-ink p-5 text-white">
+        <div class="text-sm text-white/60">黑貓宅配加保</div>
+        <div class="mt-1 font-display text-2xl font-bold text-accent">
+          商品金額 × {insurance.rate * 100}%
+        </div>
+        <div class="mt-1 text-xs text-white/60">
+          遺失、毀損依報值金額理賠，最高 {ntd(insurance.maxValue)}
+        </div>
+      </div>
+    </div>
+  </section>
+</Base>

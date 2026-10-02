@@ -1,0 +1,27 @@
+// 給互動元件（Preact）用的商品資料：只含可序列化的欄位，不依賴 astro:content
+export type Category = "單卡" | "原盒・擴充包" | "鑑定卡" | "周邊";
+export const categories: Category[] = ["單卡", "原盒・擴充包", "鑑定卡", "周邊"];
+
+export type Condition = "全新" | "近全新" | "輕微瑕疵" | "明顯瑕疵";
+export const conditions: Condition[] = ["全新", "近全新", "輕微瑕疵", "明顯瑕疵"];
+
+export type ProductView = {
+  id: string;
+  href: string;
+  name: string;
+  category: Category;
+  game: string;
+  set?: string;
+  number?: string;
+  rarity?: string;
+  language?: string;
+  condition?: Condition;
+  grade?: { company: string; score: string };
+  price: number;
+  originalPrice?: number;
+  stock: number;
+  myshipUrl?: string;
+  addedAt: string; // YYYY-MM-DD
+  featured: boolean;
+  thumb?: string; // 已最佳化的縮圖網址；沒有照片時為 undefined
+};

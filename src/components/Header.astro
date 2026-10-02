@@ -1,0 +1,89 @@
+---
+import { shop } from "../config/shop";
+import { categories } from "../lib/types";
+import { url } from "../lib/url";
+
+const path = Astro.url.pathname;
+const nav = [
+  { href: url("/shop/"), label: "全部商品" },
+  ...categories.map((c) => ({ href: url(`/shop/?category=${encodeURIComponent(c)}`), label: c })),
+  { href: url("/guide/"), label: "購物說明" },
+];
+---
+
+<header class="sticky top-0 z-40 bg-ink text-white">
+  <div class="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6">
+    <a href={url("/")} class="flex shrink-0 items-center gap-2">
+      <span class="grid h-8 w-6 place-items-center rounded-[4px] bg-accent text-sm font-black text-accent-ink rotate-[-8deg]">
+        ✦
+      </span>
+      <span class="leading-tight">
+        <span class="block text-base font-bold tracking-wide">{shop.name}</span>
+        <span class="block font-display text-[10px] tracking-widest text-white/50">{shop.tagline}</span>
+      </span>
+    </a>
+
+    <form action={url("/shop/")} method="get" class="ml-auto hidden max-w-sm flex-1 md:block">
+      <input
+        type="search"
+        name="q"
+        placeholder="搜尋卡名、系列、卡號"
+        class="w-full rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm text-white placeholder:text-white/50 outline-none focus:border-accent"
+      />
+    </form>
+
+    <div class="ml-auto flex items-center gap-2 md:ml-0">
+      {
+        shop.myshipStoreUrl && (
+          <a
+            href={shop.myshipStoreUrl}
+            target="_blank"
+            rel="noopener"
+            class="hidden rounded-full border border-white/20 px-3 py-1.5 text-xs hover:border-accent sm:block"
+          >
+            賣貨便賣場 ↗
+          </a>
+        )
+      }
+      <a
+        href={shop.lineUrl}
+        target="_blank"
+        rel="noopener"
+        class="rounded-full bg-[#06c755] px-3 py-1.5 text-xs font-bold text-white hover:brightness-110"
+      >
+        LINE 詢問
+      </a>
+    </div>
+  </div>
+
+  <nav class="border-t border-white/10">
+    <div class="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-2 sm:px-4">
+      {
+        nav.map((n) => (
+          <a
+            href={n.href}
+            data-nav
+            class:list={[
+              "shrink-0 px-3 py-2.5 text-sm transition-colors hover:text-accent",
+              n.href === path ? "text-accent" : "text-white/75",
+            ]}
+          >
+            {n.label}
+          </a>
+        ))
+      }
+    </div>
+  </nav>
+</header>
+
+<script>
+  // 分類連結帶 ?category=，靜態頁無法在建置時判斷，進頁面後依網址標示目前所在分類
+  const here = new URL(location.href);
+  const cat = here.searchParams.get("category");
+  document.querySelectorAll<HTMLAnchorElement>("[data-nav]").forEach((a) => {
+    const u = new URL(a.href);
+    const active = u.pathname === here.pathname && u.searchParams.get("category") === cat;
+    a.classList.toggle("text-accent", active);
+    a.classList.toggle("text-white/75", !active);
+  });
+</script>

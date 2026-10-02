@@ -1,0 +1,149 @@
+---
+import Base from "../layouts/Base.astro";
+import { insurance, shippingMethods, shop } from "../config/shop";
+import { quote } from "../lib/shipping";
+import { ntd } from "../lib/format";
+
+// 保價費試算範例
+const samples = [1000, 8000, 20000, 26800, 50000];
+const seven = shippingMethods.find((m) => m.id === "711")!;
+
+const conditionDefs = [
+  ["全新", "開包即入套，無任何白點、刮痕或邊角磨損。"],
+  ["近全新", "需近看才能察覺的極輕微瑕疵，例如背面一處小白點。"],
+  ["輕微瑕疵", "正常距離可見的小白點、輕微刮痕或邊角磨損，不影響收藏。"],
+  ["明顯瑕疵", "明顯的白邊、壓痕、折痕或凹痕，適合對戰用，價格已反映卡況。"],
+];
+---
+
+<Base title="購物說明">
+  <div class="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+    <h1 class="text-3xl font-bold">購物說明</h1>
+    <p class="mt-2 text-sm text-muted">下單前請先看過，有問題歡迎 LINE 詢問（ID：{shop.lineId}）。</p>
+
+    <section class="mt-10">
+      <h2 class="text-xl font-bold">如何下單</h2>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2">
+        <div class="rounded-xl border border-line bg-surface p-5">
+          <div class="font-medium">7-11 店到店</div>
+          <ol class="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-ink-soft">
+            <li>商品頁選「7-11 店到店」</li>
+            <li>按「前往 7-11 賣貨便下單」</li>
+            <li>在賣貨便選數量與取貨門市</li>
+            <li>到店取貨時付款（或於賣貨便線上付款）</li>
+          </ol>
+        </div>
+        <div class="rounded-xl border border-line bg-surface p-5">
+          <div class="font-medium">黑貓宅配（可加保）</div>
+          <ol class="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-ink-soft">
+            <li>商品頁選「黑貓宅配」，決定是否加保</li>
+            <li>按「複製訂單並用 LINE 下單」</li>
+            <li>在 LINE 貼上訂單、補上收件資料</li>
+            <li>確認金額後轉帳，{shop.leadTime}</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-xl font-bold">運費</h2>
+      <div class="mt-4 overflow-hidden rounded-xl border border-line bg-surface">
+        <table class="w-full text-sm">
+          <thead class="bg-bg text-left text-xs text-muted">
+            <tr>
+              <th class="px-4 py-2.5 font-medium">方式</th>
+              <th class="px-4 py-2.5 font-medium">運費</th>
+              <th class="hidden px-4 py-2.5 font-medium sm:table-cell">付款</th>
+              <th class="px-4 py-2.5 font-medium">商品金額上限</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              shippingMethods.map((m) => (
+                <tr class="border-t border-line">
+                  <td class="px-4 py-3">
+                    {m.short}
+                    <div class="text-xs text-muted">{m.feeNote}</div>
+                  </td>
+                  <td class="px-4 py-3 font-medium">{ntd(m.fee)}</td>
+                  <td class="hidden px-4 py-3 text-ink-soft sm:table-cell">{m.payment}</td>
+                  <td class="px-4 py-3 text-ink-soft">{m.maxValue ? ntd(m.maxValue) : "不限"}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="mt-10" id="insurance">
+      <h2 class="text-xl font-bold">加保（黑貓報值）</h2>
+      <ul class="mt-3 list-disc space-y-1.5 pl-5 text-sm text-ink-soft">
+        <li>保價費 = 商品金額 × {insurance.rate * 100}%（無條件進位），會隨商品價格浮動。</li>
+        <li>加保後遺失或毀損依報值金額理賠，最高 {ntd(insurance.maxValue)}。</li>
+        <li>商品超過 {ntd(insurance.requiredAbove)}：依黑貓規定必須報值，會自動加保。</li>
+        <li>7-11 店到店沒有加保服務，遺失依訂單金額理賠，上限 {ntd(seven.liabilityCap)}。</li>
+      </ul>
+
+      <div class="mt-4 overflow-hidden rounded-xl border border-line bg-surface">
+        <table class="w-full text-sm">
+          <thead class="bg-bg text-left text-xs text-muted">
+            <tr>
+              <th class="px-4 py-2.5 font-medium">商品金額</th>
+              <th class="px-4 py-2.5 font-medium">保價費</th>
+              <th class="px-4 py-2.5 font-medium">黑貓宅配合計</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              samples.map((n) => {
+                const q = quote("tcat", n, true);
+                return (
+                  <tr class="border-t border-line">
+                    <td class="px-4 py-2.5">{ntd(n)}</td>
+                    <td class="px-4 py-2.5">{ntd(q.insuranceFee)}</td>
+                    <td class="px-4 py-2.5 font-medium">{ntd(q.total)}</td>
+                  </tr>
+                );
+              })
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="mt-10" id="condition">
+      <h2 class="text-xl font-bold">卡況分級</h2>
+      <dl class="mt-4 divide-y divide-line rounded-xl border border-line bg-surface">
+        {
+          conditionDefs.map(([k, v]) => (
+            <div class="flex gap-4 px-4 py-3 text-sm">
+              <dt class="w-20 shrink-0 font-medium">{k}</dt>
+              <dd class="text-ink-soft">{v}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-xl font-bold">出貨與退換</h2>
+      <ul class="mt-3 list-disc space-y-1.5 pl-5 text-sm text-ink-soft">
+        <li>{shop.leadTime}，單卡一律卡套＋卡磚＋防水包裝。</li>
+        <li>收到商品與照片不符，請於 3 天內 LINE 聯絡並附開箱照片或影片。</li>
+        <li>卡牌屬個人收藏品，非商品瑕疵恕不接受退換。</li>
+      </ul>
+    </section>
+
+    <section class="mt-10 rounded-xl border border-sale/30 bg-sale/5 p-5">
+      <h2 class="font-bold text-sale">防詐騙提醒</h2>
+      <p class="mt-2 text-sm leading-relaxed text-ink-soft">
+        本店不會傳任何連結要求你「簽署金流服務」、「驗證帳戶」或操作 ATM。賣貨便訂單只會從商品頁的按鈕進入，遇到可疑訊息請直接封鎖並撥打 165 反詐騙專線。
+      </p>
+    </section>
+
+    <p class="mt-10 text-xs text-muted">
+      運費依 7-11 賣貨便與黑貓宅急便公告（查詢日期 2026-10-02），實際以物流商最新公告為準。
+    </p>
+  </div>
+</Base>

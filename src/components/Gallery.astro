@@ -1,0 +1,97 @@
+---
+import { getImage } from "astro:assets";
+import type { ImageMetadata } from "astro";
+import { CardArt } from "./CardArt";
+import type { ProductView } from "../lib/types";
+
+interface Props {
+  images: ImageMetadata[];
+  product: ProductView;
+}
+const { images, product } = Astro.props;
+
+// 主圖用中尺寸、點開看大圖
+const shots = await Promise.all(
+  images.map(async (img) => ({
+    main: (await getImage({ src: img, width: 900, format: "webp" })).src,
+    full: (await getImage({ src: img, width: 1800, format: "webp" })).src,
+    thumb: (await getImage({ src: img, width: 160, format: "webp" })).src,
+  })),
+);
+---
+
+<div data-gallery>
+  <div class="relative aspect-[63/88] overflow-hidden rounded-2xl border border-line bg-gradient-to-b from-slate-50 to-slate-200">
+    {
+      shots.length > 0 ? (
+        <button type="button" data-open class="h-full w-full cursor-zoom-in" aria-label="放大圖片">
+          <img data-main src={shots[0].main} data-full={shots[0].full} alt={product.name} class="h-full w-full object-contain p-4" />
+        </button>
+      ) : (
+        <div class="mx-auto h-full w-full max-w-md">
+          <CardArt {...product} />
+        </div>
+      )
+    }
+  </div>
+
+  {
+    shots.length > 1 && (
+      <div class="mt-3 flex gap-2 overflow-x-auto">
+        {shots.map((s, i) => (
+          <button
+            type="button"
+            data-thumb
+            data-main-src={s.main}
+            data-full-src={s.full}
+            class:list={[
+              "h-20 w-16 shrink-0 overflow-hidden rounded-lg border-2 bg-surface",
+              i === 0 ? "border-ink" : "border-transparent",
+            ]}
+          >
+            <img src={s.thumb} alt={`${product.name} 第 ${i + 1} 張`} class="h-full w-full object-cover" />
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  {
+    shots.length === 0 && (
+      <p class="mt-2 text-center text-xs text-muted">示意圖・實際商品照片上架後會顯示在這裡</p>
+    )
+  }
+
+  <dialog data-dialog class="m-auto max-h-[92vh] max-w-[92vw] rounded-xl bg-transparent p-0 backdrop:bg-black/80">
+    <form method="dialog">
+      <button class="block cursor-zoom-out" aria-label="關閉">
+        <img data-full-img alt={product.name} class="max-h-[92vh] max-w-[92vw] object-contain" />
+      </button>
+    </form>
+  </dialog>
+</div>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-gallery]").forEach((g) => {
+    const main = g.querySelector<HTMLImageElement>("[data-main]");
+    const dialog = g.querySelector<HTMLDialogElement>("[data-dialog]");
+    const fullImg = g.querySelector<HTMLImageElement>("[data-full-img]");
+    const thumbs = g.querySelectorAll<HTMLButtonElement>("[data-thumb]");
+
+    thumbs.forEach((t) =>
+      t.addEventListener("click", () => {
+        if (!main) return;
+        main.src = t.dataset.mainSrc!;
+        main.dataset.full = t.dataset.fullSrc!;
+        thumbs.forEach((x) => x.classList.toggle("border-ink", x === t));
+        thumbs.forEach((x) => x.classList.toggle("border-transparent", x !== t));
+      }),
+    );
+
+    g.querySelector("[data-open]")?.addEventListener("click", () => {
+      if (!dialog || !fullImg || !main) return;
+      fullImg.src = main.dataset.full!;
+      dialog.showModal();
+    });
+  });
+</script>
