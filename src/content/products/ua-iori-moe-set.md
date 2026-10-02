@@ -4,7 +4,7 @@ category: 周邊
 game: UNION ARENA
 language: 日文
 price: 3000
-stock: 10              # 可預購名額
+stock: 1               # 可預購名額
 payments: [transfer]   # 預購只收轉帳：到貨後通知付款
 preorder: { eta: 2027 年 2 月左右 }
 images: ["../../assets/products/ua-iori-moe-set.jpg"]

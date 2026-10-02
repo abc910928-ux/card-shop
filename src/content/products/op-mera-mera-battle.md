@@ -9,7 +9,8 @@ payments: [transfer]   # 預購只收轉帳：到貨後通知付款
 preorder: { eta: 10/18 左右 }
 addedAt: 2026-10-03
 featured: true
+images: ["../../assets/products/op-mera-mera-battle.jpg"]
 ---
 ONE PIECE CARD GAME「燒燒果實爭霸戰」卡墊＋卡片組合，NT$2,200／組。
 
-如果數量額滿會提早結單。
+如果數量額滿會提早結單。圖片為官方示意圖。
