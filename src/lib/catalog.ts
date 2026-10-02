@@ -7,7 +7,7 @@ import { url } from "./url";
 export type ProductEntry = CollectionEntry<"products">;
 
 export async function getProducts(): Promise<ProductEntry[]> {
-  const all = await getCollection("products");
+  const all = await getCollection("products", (e) => !e.data.hidden);
   // 預設排序：新上架在前
   return all.sort((a, b) => b.data.addedAt.getTime() - a.data.addedAt.getTime());
 }

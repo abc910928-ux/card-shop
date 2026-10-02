@@ -14,6 +14,7 @@ stock: 1                # 0 = 已售完
 images: []              # 例：["../../assets/products/mew-front.jpg", "../../assets/products/mew-back.jpg"]
 myshipUrl: https://myship.7-11.com.tw/   # 選填：這件商品的賣貨便網址，沒填就不提供賣貨便
 addedAt: 2026-09-30
+hidden: true            # 範例商品，不上架；複製成新商品時刪掉這行
 featured: true
 ---
 開包後直接入套，正面無白點，背面右下角極輕微邊角磨損，需近看才看得出。

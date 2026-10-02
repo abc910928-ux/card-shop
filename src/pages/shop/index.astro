@@ -1,6 +1,7 @@
 ---
 import Base from "../../layouts/Base.astro";
 import ShopBrowser from "../../components/ShopBrowser";
+import ComingSoon from "../../components/ComingSoon.astro";
 import { getProductViews } from "../../lib/catalog";
 
 const products = await getProductViews();
@@ -9,6 +10,6 @@ const products = await getProductViews();
 <Base title="全部商品">
   <section class="mx-auto max-w-7xl px-4 py-8 sm:px-6">
     <h1 class="mb-6 text-2xl font-bold">全部商品</h1>
-    <ShopBrowser client:load products={products} />
+    {products.length > 0 ? <ShopBrowser client:load products={products} /> : <ComingSoon />}
   </section>
 </Base>

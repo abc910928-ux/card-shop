@@ -24,6 +24,7 @@ const products = defineCollection({
       myshipUrl: z.string().optional(),
       addedAt: z.coerce.date(),
       featured: z.boolean().default(false),
+      hidden: z.boolean().default(false), // true = 不上架（範本、暫時下架）
     }),
 });
 

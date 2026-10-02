@@ -2,6 +2,7 @@
 import Base from "../layouts/Base.astro";
 import { ProductCard } from "../components/ProductCard";
 import { CardArt } from "../components/CardArt";
+import ComingSoon from "../components/ComingSoon.astro";
 import { getProductViews } from "../lib/catalog";
 import { categories } from "../lib/types";
 import { shippingMethods } from "../config/shop";
@@ -15,6 +16,13 @@ const latest = inStock.slice(0, 8);
 const featured = inStock.filter((p) => p.featured).slice(0, 4);
 const fan = (featured.length >= 3 ? featured : inStock).slice(0, 3);
 const tcat = rateCoverage();
+
+// 還沒有商品時，首頁右側用示意卡片撐住版面
+const decor = [
+  { name: "Coming Soon", category: "原盒・擴充包" as const, game: "TCG", set: "New Release" },
+  { name: "Coming Soon", category: "單卡" as const, game: "TCG", rarity: "SAR", number: "???/???" },
+  { name: "Coming Soon", category: "鑑定卡" as const, game: "TCG", rarity: "SR", grade: { company: "PSA", score: "10" } },
+];
 
 const catIcon: Record<string, string> = {
   單卡: "🂠",
@@ -51,6 +59,16 @@ const catIcon: Record<string, string> = {
 
       <!-- 精選卡片扇形展示 -->
       <div class="relative mx-auto h-64 w-full max-w-sm sm:h-80" aria-hidden="true">
+        {fan.length === 0 &&
+          decor.map((p, i) => (
+            <a
+              href={url("/proxy/")}
+              class="absolute left-1/2 top-1/2 aspect-[63/88] w-36 overflow-hidden rounded-xl bg-gradient-to-b from-slate-50 to-slate-200 shadow-xl transition hover:z-10 hover:-translate-y-2 sm:w-44"
+              style={`transform: translate(-50%, -50%) translateX(${(i - 1) * 70}px) rotate(${(i - 1) * 10}deg); z-index: ${i === 1 ? 2 : 1};`}
+            >
+              <CardArt {...p} />
+            </a>
+          ))}
         {
           fan.map((p, i) => (
             <a
@@ -86,7 +104,7 @@ const catIcon: Record<string, string> = {
               </span>
               <span>
                 <span class="block font-medium">{c}</span>
-                <span class="text-xs text-muted">{n} 件現貨</span>
+                <span class="text-xs text-muted">{n > 0 ? `${n} 件現貨` : "即將上架"}</span>
               </span>
             </a>
           );
@@ -101,9 +119,17 @@ const catIcon: Record<string, string> = {
       <h2 class="text-xl font-bold sm:text-2xl">新上架</h2>
       <a href={url("/shop/")} class="text-sm text-muted hover:text-ink">看全部 →</a>
     </div>
-    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
-      {latest.map((p) => <ProductCard p={p} />)}
-    </div>
+    {
+      latest.length > 0 ? (
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+          {latest.map((p) => (
+            <ProductCard p={p} />
+          ))}
+        </div>
+      ) : (
+        <ComingSoon />
+      )
+    }
   </section>
 
   <!-- 寄送方式 -->

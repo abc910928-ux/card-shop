@@ -13,6 +13,7 @@ price: 26800
 stock: 1
 images: []
 addedAt: 2026-09-29
+hidden: true            # 範例商品，不上架；複製成新商品時刪掉這行
 featured: true
 ---
 PSA 10 鑑定，殼身無刮痕，可於 PSA 官網查詢證號。金額超過 2 萬元，僅提供黑貓宅配並強制加保。

@@ -1,0 +1,25 @@
+---
+// 還沒有上架商品時顯示：引導到海外代購或 LINE 詢問
+import { shop } from "../config/shop";
+import { url } from "../lib/url";
+---
+
+<div class="rounded-2xl border border-dashed border-line bg-surface px-6 py-12 text-center">
+  <div class="text-lg font-bold">商品陸續上架中</div>
+  <p class="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
+    現貨商品整理中，很快就會上架。想找特定的卡，可以先用海外代購詢價，或直接 LINE 問我們。
+  </p>
+  <div class="mt-6 flex flex-wrap justify-center gap-2">
+    <a href={url("/proxy/")} class="rounded-xl bg-accent px-5 py-2.5 text-sm font-bold text-accent-ink">
+      海外代購詢價
+    </a>
+    <a
+      href={shop.lineUrl}
+      target="_blank"
+      rel="noopener"
+      class="rounded-xl border border-ink px-5 py-2.5 text-sm font-medium"
+    >
+      LINE 詢問
+    </a>
+  </div>
+</div>

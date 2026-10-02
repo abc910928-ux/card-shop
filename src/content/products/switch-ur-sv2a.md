@@ -13,5 +13,6 @@ stock: 0
 images: []
 myshipUrl: https://myship.7-11.com.tw/
 addedAt: 2026-09-12
+hidden: true            # 範例商品，不上架；複製成新商品時刪掉這行
 ---
 金卡，表面無刮痕。
