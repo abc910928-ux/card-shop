@@ -17,12 +17,18 @@ const featured = inStock.filter((p) => p.featured).slice(0, 4);
 const fan = (featured.length >= 3 ? featured : inStock).slice(0, 3);
 const tcat = rateCoverage();
 
-// 還沒有商品時，首頁右側用示意卡片撐住版面
+// 首頁右側扇形三張：真商品優先放中間，不足三件時用示意卡補滿
 const decor = [
   { name: "Coming Soon", category: "原盒・擴充包" as const, game: "TCG", set: "New Release" },
   { name: "Coming Soon", category: "單卡" as const, game: "TCG", rarity: "SAR", number: "???/???" },
   { name: "Coming Soon", category: "鑑定卡" as const, game: "TCG", rarity: "SR", grade: { company: "PSA", score: "10" } },
 ];
+type Slot = { href: string; thumb?: string; art: Parameters<typeof CardArt>[0] };
+const slots: Slot[] = [];
+[1, 0, 2].forEach((pos, k) => {
+  const p = fan[k];
+  slots[pos] = p ? { href: p.href, thumb: p.thumb, art: p } : { href: url("/proxy/"), art: decor[pos] };
+});
 
 const catIcon: Record<string, string> = {
   單卡: "🂠",
@@ -59,27 +65,17 @@ const catIcon: Record<string, string> = {
 
       <!-- 精選卡片扇形展示 -->
       <div class="relative mx-auto h-64 w-full max-w-sm sm:h-80" aria-hidden="true">
-        {fan.length === 0 &&
-          decor.map((p, i) => (
-            <a
-              href={url("/proxy/")}
-              class="absolute left-1/2 top-1/2 aspect-[63/88] w-36 overflow-hidden rounded-xl bg-gradient-to-b from-slate-50 to-slate-200 shadow-xl transition hover:z-10 hover:-translate-y-2 sm:w-44"
-              style={`transform: translate(-50%, -50%) translateX(${(i - 1) * 70}px) rotate(${(i - 1) * 10}deg); z-index: ${i === 1 ? 2 : 1};`}
-            >
-              <CardArt {...p} />
-            </a>
-          ))}
         {
-          fan.map((p, i) => (
+          slots.map((s, i) => (
             <a
-              href={p.href}
+              href={s.href}
               class="absolute left-1/2 top-1/2 aspect-[63/88] w-36 overflow-hidden rounded-xl bg-gradient-to-b from-slate-50 to-slate-200 shadow-xl transition hover:z-10 hover:-translate-y-2 sm:w-44"
               style={`transform: translate(-50%, -50%) translateX(${(i - 1) * 70}px) rotate(${(i - 1) * 10}deg); z-index: ${i === 1 ? 2 : 1};`}
             >
-              {p.thumb ? (
-                <img src={p.thumb} alt="" class="h-full w-full object-contain p-2" />
+              {s.thumb ? (
+                <img src={s.thumb} alt="" class="h-full w-full object-contain p-2" />
               ) : (
-                <CardArt {...p} />
+                <CardArt {...s.art} />
               )}
             </a>
           ))
