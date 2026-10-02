@@ -18,7 +18,7 @@ npm run dev
 
 ## 新增商品
 
-到 `src/content/products/` 複製一個 `.md` 檔，改內容即可。**檔名就是網址**（例如 `pikachu-ar.md` 對應 `/item/pikachu-ar/`），請用英文、數字和連字號。
+到 `src/content/products/` 複製一個 `.md` 檔，改內容即可。資料夾裡的範例商品都設了 `hidden: true`（不上架），複製後記得**刪掉 `hidden: true` 這行**，商品才會出現；之後要暫時下架某件商品，也可以加回這行。**檔名就是網址**（例如 `pikachu-ar.md` 對應 `/item/pikachu-ar/`），請用英文、數字和連字號。
 
 ```yaml
 ---
