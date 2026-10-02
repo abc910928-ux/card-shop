@@ -5,31 +5,32 @@ import { copyAndOpenLine } from "../lib/line";
 
 const KINDS = ["鑑定卡", "未鑑定單卡", "原盒・卡包", "其他"] as const;
 
-// SNKRDUNK 代購詢價單：填好後複製成文字並開啟 LINE
+// 海外代購詢價單：填好後複製成文字並開啟 LINE
 export default function ProxyRequestForm({ termsHref }: { termsHref: string }) {
   const [link, setLink] = useState("");
   const [name, setName] = useState("");
   const [kind, setKind] = useState<(typeof KINDS)[number]>("鑑定卡");
   const [spec, setSpec] = useState("");
   const [qty, setQty] = useState(1);
-  const [yen, setYen] = useState("");
+  const [price, setPrice] = useState("");
   const [note, setNote] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [copied, setCopied] = useState<"" | "ok" | "fail">("");
 
-  const linkOk = /^https?:\/\/([a-z0-9-]+\.)*snkrdunk\.com\//i.test(link.trim());
+  // 任何 http(s) 網址都可以，只檢查格式完整
+  const linkOk = /^https?:\/\/[^\s/]+\.[^\s/]+(\/\S*)?$/i.test(link.trim());
   const canSend = linkOk && agreed;
 
   const text = useMemo(() => {
-    const lines = [`【${shop.name} SNKRDUNK 代購詢價】`, `商品網址：${link.trim()}`];
+    const lines = [`【${shop.name} 海外代購詢價】`, `商品網址：${link.trim()}`];
     if (name.trim()) lines.push(`商品：${name.trim()}`);
     lines.push(`類型：${kind}${spec.trim() ? `（${spec.trim()}）` : ""}`, `數量：${qty}`);
-    if (yen.trim()) lines.push(`網站標價：¥${yen.trim()}`);
+    if (price.trim()) lines.push(`網站標價：${price.trim()}`);
     if (note.trim()) lines.push(`備註：${note.trim()}`);
     // 留下「事先告知並同意」的紀錄
     lines.push("", "我已閱讀並同意代購服務條款，了解代購商品不適用七日鑑賞期。");
     return lines.join("\n");
-  }, [link, name, kind, spec, qty, yen, note]);
+  }, [link, name, kind, spec, qty, price, note]);
 
   async function send() {
     setCopied((await copyAndOpenLine(text)) ? "ok" : "fail");
@@ -44,16 +45,16 @@ export default function ProxyRequestForm({ termsHref }: { termsHref: string }) {
       <p class="mt-1 text-xs text-muted">填好後會複製成文字並開啟 LINE，貼上送出即可，我們會回覆報價。</p>
 
       <div class="mt-5 space-y-4">
-        <Field label="SNKRDUNK 商品網址" required>
+        <Field label="商品網址" required>
           <input
             type="url"
             value={link}
             onInput={(e) => setLink((e.target as HTMLInputElement).value)}
-            placeholder="https://snkrdunk.com/..."
+            placeholder="貼上海外網站的商品網址 https://..."
             class={input}
           />
           {link && !linkOk && (
-            <span class="mt-1 block text-xs text-sale">請貼上 snkrdunk.com 的商品網址</span>
+            <span class="mt-1 block text-xs text-sale">請貼上完整的商品網址（https:// 開頭）</span>
           )}
         </Field>
 
@@ -99,12 +100,11 @@ export default function ProxyRequestForm({ termsHref }: { termsHref: string }) {
               class={input}
             />
           </Field>
-          <Field label="網站標價（日幣，選填）">
+          <Field label="網站標價（選填）">
             <input
-              inputMode="numeric"
-              value={yen}
-              onInput={(e) => setYen((e.target as HTMLInputElement).value.replace(/[^\d,]/g, ""))}
-              placeholder="例：12,800"
+              value={price}
+              onInput={(e) => setPrice((e.target as HTMLInputElement).value)}
+              placeholder="例：¥12,800"
               class={input}
             />
           </Field>

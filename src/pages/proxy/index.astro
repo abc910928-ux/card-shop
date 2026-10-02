@@ -4,23 +4,29 @@ import ProxyRequestForm from "../../components/ProxyRequestForm";
 import { url } from "../../lib/url";
 
 const steps = [
-  ["貼網址詢價", "在 SNKRDUNK 找到想要的商品，把網址貼到右邊的詢價單，用 LINE 傳給我們。"],
-  ["收到報價", "我們回覆代購報價：日幣標價 × 報價匯率，再加國際運費（如有）。"],
+  ["貼網址詢價", "在海外網站找到想要的商品，把網址貼到詢價單，用 LINE 傳給我們。"],
+  ["收到報價", "我們回覆代購報價：外幣標價 × 報價匯率，再加國際運費（如有）。"],
   ["付清全額", "確認報價後 24 小時內付款，委託才成立。"],
-  ["代為購買", "我們在 SNKRDUNK 下單，並把購買憑證傳給你。"],
+  ["代為購買", "我們替你在該網站下單，並把購買憑證傳給你。"],
   ["到貨出貨", "商品寄到後通知你，選擇 7-11 或黑貓寄送。"],
 ];
 const termsHref = url("/terms/proxy/");
 ---
 
-<Base title="SNKRDUNK 代購" description="SNKRDUNK（スニダン）代購：PSA 鑑定卡、日版單卡、原盒，貼上網址就能詢價。">
+<Base title="海外代購" description="海外代購：海外網站的鑑定卡、單卡、原盒，貼上商品網址就能詢價。">
   <section class="border-b border-line bg-ink text-white">
     <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14">
       <p class="font-display text-xs font-bold uppercase tracking-[0.25em] text-accent">Proxy Purchase</p>
-      <h1 class="mt-2 text-3xl font-bold sm:text-4xl">SNKRDUNK 代購</h1>
+      <h1 class="mt-2 text-3xl font-bold sm:text-4xl">海外代購</h1>
       <p class="mt-3 max-w-xl text-sm leading-relaxed text-white/70 sm:text-base">
-        日本 SNKRDUNK（スニダン）上的 PSA 鑑定卡、日版單卡、原盒，貼上商品網址就能詢價，我們替你在日本下單、寄回台灣。
+        在日本、美國等海外網站看到想要的鑑定卡、單卡或原盒，貼上商品網址就能詢價，我們替你下單、寄回台灣。
       </p>
+      <a
+        href="#request"
+        class="mt-5 inline-block rounded-xl bg-accent px-5 py-2.5 text-sm font-bold text-accent-ink lg:hidden"
+      >
+        填寫詢價單 ↓
+      </a>
     </div>
   </section>
 
@@ -46,11 +52,11 @@ const termsHref = url("/terms/proxy/");
       <h2 class="mt-10 text-xl font-bold">怎麼計價</h2>
       <div class="mt-4 rounded-xl border border-ink bg-ink p-5 text-white">
         <div class="font-display text-lg font-bold text-accent sm:text-xl">
-          日幣標價 × 報價匯率 ＋ 國際運費
+          外幣標價 × 報價匯率 ＋ 國際運費
         </div>
         <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-white/70">
           <li>報價匯率依報價當天的匯率訂定，<b class="text-white">已包含代購服務費</b>，不另外收費。</li>
-          <li>報價會列出日幣原價與匯率，讓你清楚知道怎麼算出來的。</li>
+          <li>報價會列出外幣原價與匯率，讓你清楚知道怎麼算出來的。</li>
           <li>寄到你手上的國內運費，出貨時依寄送方式另計。</li>
         </ul>
       </div>
@@ -58,9 +64,10 @@ const termsHref = url("/terms/proxy/");
       <h2 class="mt-10 text-xl font-bold">注意事項</h2>
       <ul class="mt-3 list-disc space-y-2 pl-5 text-sm leading-relaxed text-ink-soft">
         <li>
-          SNKRDUNK 是二手交易平台，價格隨時變動，商品也可能被別人先買走。付款後到我們下單前若已售出或漲價，會先通知你，由你決定補差額或全額退款。
+          二手交易平台的價格隨時變動，商品也可能被別人先買走。付款後到我們下單前若已售出或漲價，會先通知你，由你決定補差額或全額退款。
         </li>
-        <li>鑑定卡以鑑定公司的評級與證號為準；未鑑定單卡以 SNKRDUNK 賣家標示的卡況與照片為準。</li>
+        <li>有些網站或商品無法代購（例如限當地會員、禁止寄送或禁止進口的商品），報價時會先告訴你。</li>
+        <li>鑑定卡以鑑定公司的評級與證號為準；未鑑定單卡以原賣家標示的卡況與照片為準。</li>
         <li>到貨時間依賣家出貨與國際物流而定，報價時會告訴你預估時間。</li>
         <li>
           <b>代購商品不適用七日鑑賞期</b>（商品瑕疵、與說明不符除外），詳見<a href={termsHref} class="underline">代購服務條款</a>。
@@ -68,7 +75,7 @@ const termsHref = url("/terms/proxy/");
       </ul>
     </div>
 
-    <aside class="lg:sticky lg:top-28 lg:self-start">
+    <aside id="request" class="scroll-mt-28 lg:sticky lg:top-28 lg:self-start">
       <ProxyRequestForm client:load termsHref={termsHref} />
     </aside>
   </div>
