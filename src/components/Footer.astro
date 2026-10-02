@@ -1,6 +1,6 @@
 ---
 import { shop, shippingMethods } from "../config/shop";
-import { ntd } from "../lib/format";
+import { feeLabel } from "../lib/shipping";
 import { url } from "../lib/url";
 ---
 
@@ -14,8 +14,8 @@ import { url } from "../lib/url";
     <div class="text-sm">
       <div class="mb-3 font-medium text-white">寄送方式</div>
       <ul class="space-y-1.5 text-white/70">
-        {shippingMethods.map((m) => <li>{m.short}：{ntd(m.fee)}</li>)}
-        <li>黑貓宅配可加保（保價費依商品金額計算）</li>
+        {shippingMethods.map((m) => <li>{m.short}：{feeLabel(m)}</li>)}
+        <li>交貨便可選申報價值，黑貓宅配可加保</li>
       </ul>
       <a href={url("/guide/")} class="mt-3 inline-block text-accent hover:underline">
         完整購物說明 →

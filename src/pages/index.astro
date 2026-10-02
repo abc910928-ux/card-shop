@@ -4,8 +4,9 @@ import { ProductCard } from "../components/ProductCard";
 import { CardArt } from "../components/CardArt";
 import { getProductViews } from "../lib/catalog";
 import { categories } from "../lib/types";
-import { insurance, shippingMethods } from "../config/shop";
+import { shippingMethods } from "../config/shop";
 import { ntd } from "../lib/format";
+import { feeLabel, rateCoverage } from "../lib/shipping";
 import { url } from "../lib/url";
 
 const products = await getProductViews();
@@ -13,6 +14,7 @@ const inStock = products.filter((p) => p.stock > 0);
 const latest = inStock.slice(0, 8);
 const featured = inStock.filter((p) => p.featured).slice(0, 4);
 const fan = (featured.length >= 3 ? featured : inStock).slice(0, 3);
+const tcat = rateCoverage();
 
 const catIcon: Record<string, string> = {
   單卡: "🂠",
@@ -106,25 +108,23 @@ const catIcon: Record<string, string> = {
 
   <!-- 寄送方式 -->
   <section class="mx-auto max-w-7xl px-4 pt-12 sm:px-6">
-    <div class="grid gap-3 md:grid-cols-3">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {
         shippingMethods.map((m) => (
           <div class="rounded-xl border border-line bg-surface p-5">
             <div class="text-sm text-muted">{m.short}</div>
-            <div class="mt-1 font-display text-2xl font-bold">{ntd(m.fee)}</div>
+            <div class="mt-1 font-display text-2xl font-bold">{feeLabel(m)}</div>
             <div class="mt-1 text-xs text-muted">{m.feeNote}</div>
           </div>
         ))
       }
-      <div class="rounded-xl border border-ink bg-ink p-5 text-white">
-        <div class="text-sm text-white/60">黑貓宅配加保</div>
-        <div class="mt-1 font-display text-2xl font-bold text-accent">
-          商品金額 × {insurance.rate * 100}%
+      <a href={url("/guide/#insurance")} class="rounded-xl border border-ink bg-ink p-5 text-white transition hover:brightness-125">
+        <div class="text-sm text-white/60">保價</div>
+        <div class="mt-1 text-lg font-bold leading-snug text-accent">
+          交貨便自選申報價值<br />黑貓加保 × {tcat.rate * 100}%
         </div>
-        <div class="mt-1 text-xs text-white/60">
-          遺失、毀損依報值金額理賠，最高 {ntd(insurance.maxValue)}
-        </div>
-      </div>
+        <div class="mt-1 text-xs text-white/60">高價卡最高可保 {ntd(tcat.maxValue)} →</div>
+      </a>
     </div>
   </section>
 </Base>

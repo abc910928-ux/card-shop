@@ -12,7 +12,7 @@ price: 7800
 originalPrice: 8500     # 選填，有填會顯示劃線原價與折扣
 stock: 1                # 0 = 已售完
 images: []              # 例：["../../assets/products/mew-front.jpg", "../../assets/products/mew-back.jpg"]
-myshipUrl: https://myship.7-11.com.tw/   # 換成這件商品的賣貨便網址
+myshipUrl: https://myship.7-11.com.tw/   # 選填：這件商品的賣貨便網址，沒填就不提供賣貨便
 addedAt: 2026-09-30
 featured: true
 ---

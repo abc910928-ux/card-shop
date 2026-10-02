@@ -6,12 +6,12 @@
 export const shop = {
   name: "卡牌小舖", // 店名（暫定）
   tagline: "TCG Singles · Sealed · Graded",
-  description: "個人卡牌小店：單卡、原盒、鑑定卡與周邊。7-11 店到店或黑貓宅配，可加保。",
+  description: "個人卡牌小店：單卡、原盒、鑑定卡與周邊。7-11 賣貨便、交貨便或黑貓宅配，可選保價。",
 
   // 頂部公告條
   announcements: [
-    "7-11 店到店 38 元・黑貓宅配 130 元",
-    "高價卡可選黑貓宅配加保，保價費依商品金額計算",
+    "7-11 賣貨便 38 元・交貨便 60 元起・黑貓宅配 130 元",
+    "交貨便可選申報價值，黑貓宅配可加保，高價卡寄送更安心",
   ],
 
   // 聯絡方式（宅配訂單透過 LINE 確認）
@@ -27,37 +27,72 @@ export const shop = {
 };
 
 // ─── 寄送方式 ────────────────────────────────────────────────
-export type ShippingId = "711" | "tcat";
+// 三種保障方式：
+//   fixed：運費固定，遺失依商品金額理賠到 cap 為止（賣貨便）
+//   tiers：買家選申報價值，運費跟著級距跳，遺失最多賠到申報價值（7-11 交貨便）
+//   rate ：可加保，保價費 = 商品金額 × rate（黑貓報值）
+export type ShippingId = "myship" | "711" | "tcat";
+
+export type ValueTier = { upTo: number; fee: number };
+
+export type Coverage =
+  | { kind: "fixed"; cap: number }
+  | { kind: "tiers"; tiers: ValueTier[] }
+  | {
+      kind: "rate";
+      baseCap: number; // 沒加保時的理賠上限
+      rate: number;
+      requiredAbove: number; // 超過這個金額必須加保
+      maxValue: number; // 最高可保金額
+    };
 
 export type ShippingMethod = {
   id: ShippingId;
   label: string;
   short: string;
-  fee: number; // 運費（元）
+  fee: number; // 基本運費（tiers 類型以級距為準）
   feeNote: string;
-  payment: string; // 付款方式
+  payment: string;
   orderVia: "myship" | "line"; // 下單管道
-  // 商品金額上限（超過就不能選這個方式）；undefined = 不限
-  maxValue?: number;
+  requiresMyship?: boolean; // 商品有填 myshipUrl 才會出現
+  maxValue?: number; // 商品金額超過就不能選；undefined = 不限
   maxValueReason?: string;
-  // 未加保時的遺失理賠上限
-  liabilityCap: number;
-  insurable: boolean;
+  coverage: Coverage;
 };
 
 export const shippingMethods: ShippingMethod[] = [
   {
-    id: "711",
-    label: "7-11 店到店（賣貨便）",
-    short: "7-11 店到店",
+    id: "myship",
+    label: "7-11 賣貨便（店到店）",
+    short: "7-11 賣貨便",
     fee: 38,
-    feeNote: "賣貨便常溫優惠價（原價 60 元）",
-    payment: "賣貨便取貨付款或線上付款",
+    feeNote: "常溫優惠價（原價 60 元）",
+    payment: "取貨付款或賣貨便線上付款",
     orderVia: "myship",
+    requiresMyship: true,
     maxValue: 20000,
     maxValueReason: "賣貨便取貨付款與遺失理賠上限都是 2 萬元",
-    liabilityCap: 20000,
-    insurable: false,
+    coverage: { kind: "fixed", cap: 20000 },
+  },
+  {
+    id: "711",
+    label: "7-11 交貨便（常溫店到店）",
+    short: "7-11 交貨便",
+    fee: 60,
+    feeNote: "依申報價值 60–100 元",
+    payment: "LINE 確認訂單後轉帳",
+    orderVia: "line",
+    // 一般交貨便本島運費（申報價值級距 → 運費）；遺失最多賠到申報價值
+    coverage: {
+      kind: "tiers",
+      tiers: [
+        { upTo: 1000, fee: 60 },
+        { upTo: 2000, fee: 70 },
+        { upTo: 3000, fee: 80 },
+        { upTo: 4000, fee: 90 },
+        { upTo: 5000, fee: 100 },
+      ],
+    },
   },
   {
     id: "tcat",
@@ -65,21 +100,11 @@ export const shippingMethods: ShippingMethod[] = [
     short: "黑貓宅配",
     fee: 130,
     feeNote: "常溫 60 公分以下（卡牌包裹都在這級距）",
-    payment: "LINE 確認訂單後銀行轉帳",
+    payment: "LINE 確認訂單後轉帳",
     orderVia: "line",
     maxValue: 50000,
     maxValueReason: "黑貓報值上限為 5 萬元",
-    liabilityCap: 20000,
-    insurable: true,
+    // ※ 報值費率請以寄件營業所報價為準，若不同改 rate 即可
+    coverage: { kind: "rate", baseCap: 20000, rate: 0.01, requiredAbove: 20000, maxValue: 50000 },
   },
 ];
-
-// ─── 加保（黑貓報值宅急便）──────────────────────────────────
-// 保價費 = 報值金額 × rate（無條件進位），報值金額 = 商品總額（最高 maxValue）
-// 商品超過 requiredAbove 時，黑貓規定必須報值，會自動勾選且不能取消。
-// ※ 報值費率請以寄件營業所報價為準，若不同改 rate 即可。
-export const insurance = {
-  rate: 0.01,
-  requiredAbove: 20000,
-  maxValue: 50000,
-};

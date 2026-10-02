@@ -1,12 +1,14 @@
 ---
 import Base from "../layouts/Base.astro";
-import { insurance, shippingMethods, shop } from "../config/shop";
-import { quote } from "../lib/shipping";
+import { shippingMethods, shop } from "../config/shop";
+import { coverageOf, feeLabel, quote, rateCoverage, tiersCoverage } from "../lib/shipping";
 import { ntd } from "../lib/format";
 
-// 保價費試算範例
+const tiers = tiersCoverage().tiers;
+const tcat = rateCoverage();
+const myshipCap = coverageOf("myship", "fixed").cap;
+// 黑貓保價費試算範例
 const samples = [1000, 8000, 20000, 26800, 50000];
-const seven = shippingMethods.find((m) => m.id === "711")!;
 
 const conditionDefs = [
   ["全新", "開包即入套，無任何白點、刮痕或邊角磨損。"],
@@ -25,20 +27,22 @@ const conditionDefs = [
       <h2 class="text-xl font-bold">如何下單</h2>
       <div class="mt-4 grid gap-3 sm:grid-cols-2">
         <div class="rounded-xl border border-line bg-surface p-5">
-          <div class="font-medium">7-11 店到店</div>
+          <div class="font-medium">7-11 賣貨便</div>
+          <p class="mt-1 text-xs text-muted">部分商品提供，商品頁有這個選項才能選</p>
           <ol class="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-ink-soft">
-            <li>商品頁選「7-11 店到店」</li>
+            <li>商品頁選「7-11 賣貨便」</li>
             <li>按「前往 7-11 賣貨便下單」</li>
             <li>在賣貨便選數量與取貨門市</li>
             <li>到店取貨時付款（或於賣貨便線上付款）</li>
           </ol>
         </div>
         <div class="rounded-xl border border-line bg-surface p-5">
-          <div class="font-medium">黑貓宅配（可加保）</div>
+          <div class="font-medium">7-11 交貨便／黑貓宅配</div>
+          <p class="mt-1 text-xs text-muted">交貨便可選申報價值，黑貓可加保</p>
           <ol class="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-ink-soft">
-            <li>商品頁選「黑貓宅配」，決定是否加保</li>
+            <li>商品頁選寄送方式與保價</li>
             <li>按「複製訂單並用 LINE 下單」</li>
-            <li>在 LINE 貼上訂單、補上收件資料</li>
+            <li>在 LINE 貼上訂單、補上取貨門市或地址</li>
             <li>確認金額後轉帳，{shop.leadTime}</li>
           </ol>
         </div>
@@ -65,7 +69,7 @@ const conditionDefs = [
                     {m.short}
                     <div class="text-xs text-muted">{m.feeNote}</div>
                   </td>
-                  <td class="px-4 py-3 font-medium">{ntd(m.fee)}</td>
+                  <td class="px-4 py-3 font-medium">{feeLabel(m)}</td>
                   <td class="hidden px-4 py-3 text-ink-soft sm:table-cell">{m.payment}</td>
                   <td class="px-4 py-3 text-ink-soft">{m.maxValue ? ntd(m.maxValue) : "不限"}</td>
                 </tr>
@@ -77,15 +81,48 @@ const conditionDefs = [
     </section>
 
     <section class="mt-10" id="insurance">
-      <h2 class="text-xl font-bold">加保（黑貓報值）</h2>
-      <ul class="mt-3 list-disc space-y-1.5 pl-5 text-sm text-ink-soft">
-        <li>保價費 = 商品金額 × {insurance.rate * 100}%（無條件進位），會隨商品價格浮動。</li>
-        <li>加保後遺失或毀損依報值金額理賠，最高 {ntd(insurance.maxValue)}。</li>
-        <li>商品超過 {ntd(insurance.requiredAbove)}：依黑貓規定必須報值，會自動加保。</li>
-        <li>7-11 店到店沒有加保服務，遺失依訂單金額理賠，上限 {ntd(seven.liabilityCap)}。</li>
+      <h2 class="text-xl font-bold">保價與理賠</h2>
+
+      <h3 class="mt-5 font-medium">7-11 交貨便：自選申報價值</h3>
+      <p class="mt-1 text-sm text-ink-soft">
+        申報價值越高運費越高，遺失最多賠到申報價值。預設依商品金額選擇，也可以自己調低省運費（但理賠也會變少）。
+      </p>
+      <div class="mt-3 overflow-hidden rounded-xl border border-line bg-surface">
+        <table class="w-full text-sm">
+          <thead class="bg-bg text-left text-xs text-muted">
+            <tr>
+              <th class="px-4 py-2.5 font-medium">申報價值</th>
+              <th class="px-4 py-2.5 font-medium">運費</th>
+              <th class="px-4 py-2.5 font-medium">遺失最高理賠</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              tiers.map((t, i) => (
+                <tr class="border-t border-line">
+                  <td class="px-4 py-2.5">
+                    {ntd(i === 0 ? 1 : tiers[i - 1].upTo + 1)}–{ntd(t.upTo)}
+                  </td>
+                  <td class="px-4 py-2.5 font-medium">{ntd(t.fee)}</td>
+                  <td class="px-4 py-2.5">{ntd(t.upTo)}</td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+      <p class="mt-2 text-xs text-muted">
+        交貨便最高只能申報 {ntd(tiers[tiers.length - 1].upTo)}，更高價的卡建議選黑貓宅配加保。
+      </p>
+
+      <h3 class="mt-8 font-medium">黑貓宅配：加保</h3>
+      <ul class="mt-2 list-disc space-y-1.5 pl-5 text-sm text-ink-soft">
+        <li>保價費 = 商品金額 × {tcat.rate * 100}%（無條件進位），會隨商品價格浮動。</li>
+        <li>加保後遺失或毀損依報值金額理賠，最高 {ntd(tcat.maxValue)}；未加保最多賠 {ntd(tcat.baseCap)}。</li>
+        <li>商品超過 {ntd(tcat.requiredAbove)}：依黑貓規定必須報值，會自動加保。</li>
       </ul>
 
-      <div class="mt-4 overflow-hidden rounded-xl border border-line bg-surface">
+      <div class="mt-3 overflow-hidden rounded-xl border border-line bg-surface">
         <table class="w-full text-sm">
           <thead class="bg-bg text-left text-xs text-muted">
             <tr>
@@ -97,7 +134,7 @@ const conditionDefs = [
           <tbody>
             {
               samples.map((n) => {
-                const q = quote("tcat", n, true);
+                const q = quote("tcat", n, { insure: true });
                 return (
                   <tr class="border-t border-line">
                     <td class="px-4 py-2.5">{ntd(n)}</td>
@@ -110,6 +147,9 @@ const conditionDefs = [
           </tbody>
         </table>
       </div>
+
+      <h3 class="mt-8 font-medium">7-11 賣貨便</h3>
+      <p class="mt-1 text-sm text-ink-soft">沒有保價選項，遺失依訂單金額理賠，上限 {ntd(myshipCap)}。</p>
     </section>
 
     <section class="mt-10" id="condition">
@@ -143,7 +183,7 @@ const conditionDefs = [
     </section>
 
     <p class="mt-10 text-xs text-muted">
-      運費依 7-11 賣貨便與黑貓宅急便公告（查詢日期 2026-10-02），實際以物流商最新公告為準。
+      運費依 7-11 賣貨便、交貨便與黑貓宅急便公告（查詢日期 2026-10-02），實際以物流商最新公告為準。
     </p>
   </div>
 </Base>

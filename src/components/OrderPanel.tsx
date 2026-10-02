@@ -1,52 +1,63 @@
 import { useMemo, useState } from "preact/hooks";
-import { insurance, shippingMethods, shop, type ShippingId } from "../config/shop";
-import { availability, defaultMethod, insuranceFee, insuranceRequired, quote } from "../lib/shipping";
+import { shop, type ShippingId } from "../config/shop";
+import {
+  availability,
+  defaultMethod,
+  feeLabel,
+  insuranceRequired,
+  methodsFor,
+  quote,
+  rateFee,
+  tierFor,
+} from "../lib/shipping";
 import { discountPercent, ntd, subline } from "../lib/format";
 import type { ProductView } from "../lib/types";
 
-// 商品頁右側的下單面板：選寄送方式、是否加保，即時算出合計並導向下單管道
+// 商品頁右側的下單面板：選寄送方式與保價，即時算出合計並導向下單管道
 export default function OrderPanel({ p }: { p: ProductView }) {
   const soldOut = p.stock === 0;
+  const methods = methodsFor(p);
   const [qty, setQty] = useState(1);
   const goods = p.price * qty;
-  const [methodId, setMethodId] = useState<ShippingId>(() => defaultMethod(p.price));
+  const [methodId, setMethodId] = useState<ShippingId>(() => defaultMethod(methods, p.price));
   const [wantIns, setWantIns] = useState(false);
+  const [declared, setDeclared] = useState<number | undefined>(undefined); // undefined = 依商品金額自動選級距
   const [copied, setCopied] = useState<"" | "ok" | "fail">("");
 
-  const anyAvailable = shippingMethods.some((m) => availability(m, goods).ok);
+  const anyAvailable = methods.some((m) => availability(m, goods).ok);
   // 數量變動後若原本的方式超過上限，自動換成可用的
-  const current = shippingMethods.find((m) => m.id === methodId)!;
-  const method = availability(current, goods).ok
-    ? current
-    : shippingMethods.find((m) => availability(m, goods).ok) ?? current;
-  const q = quote(method.id, goods, wantIns);
-  const forced = insuranceRequired(method, goods);
+  const picked = methods.find((m) => m.id === methodId) ?? methods[0];
+  const method = availability(picked, goods).ok
+    ? picked
+    : (methods.find((m) => availability(m, goods).ok) ?? picked);
+  const q = quote(method.id, goods, { insure: wantIns, declared });
+  const c = method.coverage;
   const off = discountPercent(p);
-  const viaMyship = method.orderVia === "myship" && !!p.myshipUrl;
 
-  const orderText = useMemo(
-    () =>
-      [
-        `【${shop.name} 訂單】`,
-        `商品：${[subline(p), p.name, p.rarity, p.grade && `${p.grade.company} ${p.grade.score}`]
-          .filter(Boolean)
-          .join(" ")}`,
-        `商品編號：${p.id}`,
-        `單價：${ntd(p.price)} × ${qty}`,
-        `寄送：${method.short}（運費 ${ntd(q.shippingFee)}）`,
-        q.insured
-          ? `加保：是（報值 ${ntd(q.declaredValue)}，保價費 ${ntd(q.insuranceFee)}）`
-          : method.insurable
-            ? "加保：否"
-            : "",
-        `合計：${ntd(q.total)}`,
-        "",
-        method.id === "tcat" ? "收件人姓名：\n電話：\n地址：" : "取貨門市：\n收件人姓名：\n電話：",
-      ]
-        .filter((l) => l !== "")
-        .join("\n"),
-    [p, qty, method, q],
-  );
+  const orderText = useMemo(() => {
+    const item = [subline(p), p.name, p.rarity, p.grade && `${p.grade.company} ${p.grade.score}`]
+      .filter(Boolean)
+      .join(" ");
+    const lines = [
+      `【${shop.name} 訂單】`,
+      `商品：${item}`,
+      `商品編號：${p.id}`,
+      `單價：${ntd(p.price)} × ${qty}`,
+      `寄送：${method.short}（運費 ${ntd(q.shippingFee)}）`,
+    ];
+    if (c.kind === "tiers") lines.push(`申報價值：${ntd(q.declaredValue)}`);
+    if (c.kind === "rate")
+      lines.push(
+        q.insured ? `加保：是（報值 ${ntd(q.declaredValue)}，保價費 ${ntd(q.insuranceFee)}）` : "加保：否",
+      );
+    lines.push(`合計：${ntd(q.total)}`, "");
+    lines.push(
+      method.id === "tcat"
+        ? "收件人姓名：\n電話：\n地址："
+        : "取貨門市（店名或店號）：\n收件人姓名：\n電話：",
+    );
+    return lines.join("\n");
+  }, [p, qty, method, q, c.kind]);
 
   async function orderByLine() {
     try {
@@ -61,7 +72,7 @@ export default function OrderPanel({ p }: { p: ProductView }) {
   return (
     <div class="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       {/* 價格 */}
-      <div class="flex items-baseline gap-2">
+      <div class="flex flex-wrap items-baseline gap-2">
         <span class={`font-display text-3xl font-bold ${off > 0 ? "text-sale" : ""}`}>
           {ntd(p.price)}
         </span>
@@ -108,18 +119,18 @@ export default function OrderPanel({ p }: { p: ProductView }) {
           <fieldset class="mt-5">
             <legend class="mb-2 text-sm text-muted">寄送方式</legend>
             <div class="space-y-2">
-              {shippingMethods.map((m) => {
+              {methods.map((m) => {
                 const av = availability(m, goods);
                 const on = m.id === method.id && av.ok;
                 return (
                   <label
                     class={
-                      "flex cursor-pointer gap-3 rounded-xl border p-3 transition " +
+                      "flex gap-3 rounded-xl border p-3 transition " +
                       (!av.ok
                         ? "cursor-not-allowed border-line bg-bg opacity-60"
                         : on
-                          ? "border-ink ring-1 ring-ink"
-                          : "border-line hover:border-ink-soft")
+                          ? "cursor-pointer border-ink ring-1 ring-ink"
+                          : "cursor-pointer border-line hover:border-ink-soft")
                     }
                   >
                     <input
@@ -133,7 +144,7 @@ export default function OrderPanel({ p }: { p: ProductView }) {
                     <div class="flex-1 text-sm">
                       <div class="flex justify-between gap-2 font-medium">
                         <span>{m.label}</span>
-                        <span>{ntd(m.fee)}</span>
+                        <span class="shrink-0">{feeLabel(m)}</span>
                       </div>
                       <div class="mt-0.5 text-xs text-muted">
                         {av.ok ? `${m.feeNote}・${m.payment}` : `無法選擇：${av.reason}`}
@@ -145,40 +156,86 @@ export default function OrderPanel({ p }: { p: ProductView }) {
             </div>
           </fieldset>
 
-          {/* 加保 */}
+          {/* 保價 */}
           <div class="mt-4 rounded-xl bg-bg p-3 text-sm">
-            {method.insurable ? (
-              <label class={`flex gap-3 ${forced ? "" : "cursor-pointer"}`}>
+            {c.kind === "tiers" && (
+              <div>
+                <label class="mb-1.5 block font-medium" for="declared">
+                  申報價值（保價）
+                </label>
+                <select
+                  id="declared"
+                  value={q.declaredValue}
+                  onChange={(e) => setDeclared(Number((e.target as HTMLSelectElement).value))}
+                  class="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                >
+                  {c.tiers.map((t, i) => (
+                    <option value={t.upTo}>
+                      {ntd(i === 0 ? 1 : c.tiers[i - 1].upTo + 1)}–{ntd(t.upTo)}・運費 {ntd(t.fee)}
+                    </option>
+                  ))}
+                </select>
+                <div class="mt-1.5 text-xs leading-relaxed text-muted">
+                  遺失最多賠到申報價值。預設依商品金額選擇
+                  {declared !== undefined && (
+                    <button
+                      class="ml-1 underline underline-offset-2 hover:text-ink"
+                      onClick={() => setDeclared(undefined)}
+                    >
+                      （改回 {ntd(tierFor(c.tiers, goods).upTo)}）
+                    </button>
+                  )}
+                  。
+                  {goods > c.tiers[c.tiers.length - 1].upTo ? (
+                    <span class="mt-1 block text-sale">
+                      商品金額超過交貨便最高申報價值 {ntd(c.tiers[c.tiers.length - 1].upTo)}
+                      ，遺失最多只賠 {ntd(q.coverCap)}，建議改選黑貓宅配加保。
+                    </span>
+                  ) : (
+                    q.declaredValue < goods && (
+                      <span class="mt-1 block text-sale">
+                        申報價值低於商品金額，遺失最多只賠 {ntd(q.coverCap)}。
+                      </span>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+            {c.kind === "rate" && (
+              <label
+                class={`flex gap-3 ${insuranceRequired(method, goods) ? "" : "cursor-pointer"}`}
+              >
                 <input
                   type="checkbox"
                   class="mt-1 accent-ink"
                   checked={q.insured}
-                  disabled={forced}
+                  disabled={insuranceRequired(method, goods)}
                   onChange={() => setWantIns(!wantIns)}
                 />
                 <div>
                   <div class="font-medium">
                     加保（黑貓報值）
-                    <span class="ml-1 font-normal text-muted">
-                      +{ntd(insuranceFee(goods))}
-                    </span>
+                    <span class="ml-1 font-normal text-muted">+{ntd(rateFee(method, goods))}</span>
                   </div>
                   <div class="mt-0.5 text-xs leading-relaxed text-muted">
-                    保價費 = 商品金額 × {insurance.rate * 100}%，遺失或毀損依報值金額理賠（上限{" "}
-                    {ntd(insurance.maxValue)}）。
-                    {forced && (
+                    保價費 = 商品金額 × {c.rate * 100}%，遺失或毀損依報值金額理賠（上限{" "}
+                    {ntd(c.maxValue)}）。未加保最多賠 {ntd(c.baseCap)}。
+                    {insuranceRequired(method, goods) && (
                       <span class="text-ink">
                         {" "}
-                        商品超過 {ntd(insurance.requiredAbove)}，依黑貓規定必須報值。
+                        商品超過 {ntd(c.requiredAbove)}，依黑貓規定必須報值。
                       </span>
                     )}
                   </div>
                 </div>
               </label>
-            ) : (
+            )}
+
+            {c.kind === "fixed" && (
               <div class="text-xs leading-relaxed text-muted">
-                {method.short}沒有加保服務，遺失依訂單金額理賠，上限 {ntd(method.liabilityCap)}。
-                需要加保請改選黑貓宅配。
+                {method.short}沒有加保選項，遺失依訂單金額理賠，上限 {ntd(c.cap)}。
+                想自選保價請改選交貨便或黑貓宅配。
               </div>
             )}
           </div>
@@ -191,6 +248,9 @@ export default function OrderPanel({ p }: { p: ProductView }) {
             <div class="flex justify-between border-t border-line pt-2 text-base font-bold">
               <dt>合計</dt>
               <dd class="font-display">{ntd(q.total)}</dd>
+            </div>
+            <div class={`text-right text-xs ${q.coverCap < goods ? "text-sale" : "text-muted"}`}>
+              遺失最高理賠 {ntd(q.coverCap)}
             </div>
           </dl>
         </>
@@ -207,7 +267,7 @@ export default function OrderPanel({ p }: { p: ProductView }) {
           >
             {soldOut ? "LINE 詢問補貨" : "金額較高，請 LINE 洽詢寄送方式"}
           </a>
-        ) : viaMyship ? (
+        ) : method.orderVia === "myship" && p.myshipUrl ? (
           <>
             <a
               href={p.myshipUrl}
@@ -217,9 +277,7 @@ export default function OrderPanel({ p }: { p: ProductView }) {
             >
               前往 7-11 賣貨便下單 ↗
             </a>
-            <p class="text-center text-xs text-muted">
-              在賣貨便選擇數量與取貨門市，取貨時付款即可
-            </p>
+            <p class="text-center text-xs text-muted">在賣貨便選擇數量與取貨門市，取貨時付款即可</p>
           </>
         ) : (
           <>
@@ -239,7 +297,7 @@ export default function OrderPanel({ p }: { p: ProductView }) {
             {copied && (
               <textarea
                 readOnly
-                rows={8}
+                rows={9}
                 value={orderText}
                 class="w-full rounded-lg border border-line bg-bg p-3 text-xs"
                 onFocus={(e) => (e.target as HTMLTextAreaElement).select()}
