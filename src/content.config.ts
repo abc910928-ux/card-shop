@@ -9,13 +9,12 @@ const products = defineCollection({
   schema: ({ image }) =>
     z.object({
       name: z.string(),
-      category: z.enum(["單卡&卡冊", "原盒・擴充包", "鑑定卡", "周邊"]),
+      category: z.enum(["單卡&卡冊", "原盒・擴充包", "周邊"]),
       game: z.string(),
       set: z.string().optional(),
       number: z.string().optional(),
       rarity: z.string().optional(),
       language: z.string().optional(),
-      grade: z.object({ company: z.string(), score: z.string() }).optional(),
       price: z.number().int().positive(),
       originalPrice: z.number().int().positive().optional(),
       unit: z.string().optional(), // 計價單位，例：盒、包、組（顯示成「NT$1,850／盒」）

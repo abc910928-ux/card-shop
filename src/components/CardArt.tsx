@@ -1,9 +1,9 @@
 import type { ProductView } from "../lib/types";
 
-// 沒有商品照片時的佔位圖：依類別畫出卡片、鑑定殼、原盒或周邊的示意
+// 沒有商品照片時的佔位圖：依類別畫出卡片、原盒或周邊的示意
 type Props = Pick<
   ProductView,
-  "name" | "category" | "game" | "set" | "rarity" | "grade" | "number"
+  "name" | "category" | "game" | "set" | "rarity" | "number"
 >;
 
 function hue(s: string): number {
@@ -45,22 +45,6 @@ function CardFace({ p, small = false }: { p: Props; small?: boolean }) {
 }
 
 export function CardArt(p: Props) {
-  if (p.category === "鑑定卡") {
-    return (
-      <div class="flex h-full w-full flex-col rounded-[5%] border border-white/70 bg-gradient-to-b from-slate-100 to-slate-300 p-[7%] shadow-inner">
-        <div class="flex items-center justify-between rounded-sm bg-white px-2 py-1 text-[10px] font-bold text-ink shadow-sm">
-          <span class="truncate">{p.name}</span>
-          <span class="ml-1 shrink-0 text-sale">
-            {p.grade ? `${p.grade.company} ${p.grade.score}` : "GRADED"}
-          </span>
-        </div>
-        <div class="mx-auto mt-[6%] w-[82%] flex-1">
-          <CardFace p={p} small />
-        </div>
-      </div>
-    );
-  }
-
   if (p.category === "原盒・擴充包") {
     const h = hue(p.game + (p.set ?? p.name));
     return (

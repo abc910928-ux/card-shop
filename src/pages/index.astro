@@ -21,7 +21,7 @@ const tcat = rateCoverage();
 const decor = [
   { name: "Coming Soon", category: "原盒・擴充包" as const, game: "TCG", set: "New Release" },
   { name: "Coming Soon", category: "單卡&卡冊" as const, game: "TCG", rarity: "SAR", number: "???/???" },
-  { name: "Coming Soon", category: "鑑定卡" as const, game: "TCG", rarity: "SR", grade: { company: "PSA", score: "10" } },
+  { name: "Coming Soon", category: "周邊" as const, game: "TCG" },
 ];
 type Slot = { href: string; thumb?: string; art: Parameters<typeof CardArt>[0] };
 const slots: Slot[] = [];
@@ -33,7 +33,6 @@ const slots: Slot[] = [];
 const catIcon: Record<string, string> = {
   "單卡&卡冊": "🂠",
   "原盒・擴充包": "▣",
-  鑑定卡: "◈",
   周邊: "✦",
 };
 ---
@@ -44,19 +43,19 @@ const catIcon: Record<string, string> = {
     <div class="mx-auto grid max-w-7xl items-center gap-10 px-4 py-12 sm:px-6 md:grid-cols-[1.1fr_1fr] md:py-16">
       <div>
         <p class="font-display text-xs font-bold uppercase tracking-[0.25em] text-muted">
-          Singles · Sealed · Graded
+          Singles · Sealed · Supplies
         </p>
         <h1 class="mt-3 text-3xl font-bold leading-tight sm:text-5xl">
           今天想收<br />哪一張卡？
         </h1>
         <p class="mt-4 max-w-md text-sm leading-relaxed text-muted sm:text-base">
-          單卡、卡冊、原盒、鑑定卡一站找齊，商品皆為實拍，7-11 賣貨便、交貨便或黑貓宅配，高價卡可保價。
+          單卡、卡冊、原盒與周邊一站找齊，商品皆為實拍，7-11 賣貨便、交貨便或黑貓宅配，高價卡可保價。
         </p>
         <form action={url("/shop/")} method="get" class="mt-6 flex max-w-md gap-2">
           <input
             type="search"
             name="q"
-            placeholder="輸入卡名或卡號，例如 205/165"
+            placeholder="搜尋商品名稱"
             class="min-w-0 flex-1 rounded-xl border border-line bg-bg px-4 py-3 text-sm outline-none focus:border-ink"
           />
           <button class="rounded-xl bg-ink px-5 text-sm font-medium text-white">搜尋</button>

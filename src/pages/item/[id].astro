@@ -31,7 +31,6 @@ const specs = [
   ["卡號", p.number],
   ["稀有度", p.rarity],
   ["語言", p.language],
-  ["鑑定", p.grade && `${p.grade.company} ${p.grade.score}`],
 ].filter((s): s is [string, string] => !!s[1]);
 
 // 相關商品：同系列優先，其次同遊戲

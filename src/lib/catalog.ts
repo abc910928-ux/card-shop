@@ -28,7 +28,6 @@ export async function toView(entry: ProductEntry): Promise<ProductView> {
     number: d.number,
     rarity: d.rarity,
     language: d.language,
-    grade: d.grade,
     ...priceAndStock(d),
     unit: d.unit,
     payments: d.payments,

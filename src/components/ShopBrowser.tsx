@@ -4,12 +4,11 @@ import { categories, type ProductView } from "../lib/types";
 import { ProductCard } from "./ProductCard";
 import { useStockMap } from "../lib/stock";
 
-type Sort = "new" | "price-asc" | "price-desc" | "number";
+type Sort = "new" | "price-asc" | "price-desc";
 const SORTS: { id: Sort; label: string }[] = [
   { id: "new", label: "新上架" },
   { id: "price-asc", label: "價格低 → 高" },
   { id: "price-desc", label: "價格高 → 低" },
-  { id: "number", label: "卡號" },
 ];
 
 const ALL = "全部";
@@ -142,13 +141,10 @@ export default function ShopBrowser({ products: base }: { products: ProductView[
       }
       return true;
     });
-    const byNumber = (a: ProductView, b: ProductView) =>
-      (a.number ?? "~").localeCompare(b.number ?? "~", "en", { numeric: true });
     const sorters: Record<Sort, (a: ProductView, b: ProductView) => number> = {
       new: (a, b) => b.addedAt.localeCompare(a.addedAt),
       "price-asc": (a, b) => a.price - b.price,
       "price-desc": (a, b) => b.price - a.price,
-      number: byNumber,
     };
     // 售完的一律排在最後
     return list.sort((a, b) => Number(a.stock === 0) - Number(b.stock === 0) || sorters[f.sort](a, b));
@@ -263,7 +259,7 @@ export default function ShopBrowser({ products: base }: { products: ProductView[
               type="search"
               value={f.q}
               onInput={(e) => set({ q: (e.target as HTMLInputElement).value })}
-              placeholder="搜尋卡名、系列、卡號…"
+              placeholder="搜尋商品…"
               class="w-full rounded-lg border border-line bg-surface py-2.5 pl-9 pr-3 text-sm outline-none focus:border-ink"
             />
             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">

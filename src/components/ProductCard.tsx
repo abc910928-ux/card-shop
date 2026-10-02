@@ -29,19 +29,13 @@ export function ProductCard({ p, wish = false }: { p: ProductView; wish?: boolea
           </div>
         )}
 
-        {/* 左上：稀有度；鑑定卡改放左下，避免蓋住鑑定殼上方的標籤 */}
-        <div class={`absolute left-2 flex flex-col items-start gap-1 ${p.grade ? "bottom-2" : "top-2"}`}>
-          {p.grade ? (
-            <span class="rounded bg-ink px-1.5 py-0.5 text-[11px] font-bold text-white">
-              {p.grade.company} {p.grade.score}
-            </span>
-          ) : (
-            p.rarity && (
+        {/* 左上：稀有度 */}
+        <div class={`absolute left-2 flex flex-col items-start gap-1 top-2`}>
+          {p.rarity && (
               <span class={`badge-${tier} rounded px-1.5 py-0.5 text-[11px] font-bold`}>
                 {p.rarity}
               </span>
-            )
-          )}
+            )}
         </div>
 
         {/* 右上：預購、特價 */}
