@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-33 -33 66 66">
+  <!-- TCG 標誌（依 LINE 頭像截圖重繪的向量版，之後可換成原始檔） -->
+  <defs>
+    <clipPath id="disc"><circle r="29"/></clipPath>
+    <clipPath id="belowBar"><rect x="-30" y="-12.5" width="60" height="43"/></clipPath>
+  </defs>
+  <circle r="33" fill="#fff"/>
+  <g clip-path="url(#disc)">
+    <!-- 外環 -->
+    <circle r="26.75" fill="none" stroke="#000" stroke-width="4.5"/>
+    <!-- 內環：只在 T 橫槓以下 -->
+    <circle r="16.75" fill="none" stroke="#000" stroke-width="4.5" clip-path="url(#belowBar)"/>
+    <!-- G 的開口（右側） -->
+    <rect x="8" y="-7.5" width="22" height="5" fill="#fff"/>
+    <!-- T：橫槓＋直槓 -->
+    <rect x="-29" y="-17" width="58" height="4.5" fill="#000"/>
+    <rect x="-2.1" y="-13" width="4.2" height="43" fill="#000"/>
+    <!-- G 的橫槓 -->
+    <rect x="9.5" y="-2.5" width="20" height="5" fill="#000"/>
+    <!-- C 與 T 之間的細白縫（左側） -->
+    <rect x="-30" y="-12.5" width="27.9" height="1.2" fill="#fff"/>
+    <rect x="-3.5" y="12" width="1.2" height="18" fill="#fff"/>
+  </g>
+</svg>

@@ -1,4 +1,4 @@
-# 卡牌小舖
+# TCG代購
 
 個人卡牌商店網站，可以賣單卡、原盒、鑑定卡和周邊。用 [Astro](https://astro.build) 建置成純靜態網站，免費部署在 GitHub Pages。
 
@@ -55,6 +55,13 @@ featured: true          # 首頁精選
   - 黑貓：加保費率 `rate`（預設 1%）、必須報值的門檻（2 萬）、報值上限（5 萬）
 
 運費資料查詢日期是 2026-10-02，物流商調價時改這個檔案就好，全站會一起更新。
+
+## 標誌與圖示
+
+- `public/logo.svg`：頁首標誌和瀏覽器分頁圖示。目前是依 LINE 頭像截圖重繪的向量版
+- `public/favicon-32.png`、`public/apple-touch-icon.png`：從 logo.svg 產生的小圖示
+
+有原始標誌檔時，覆蓋 `public/logo.svg` 就能換掉；如果原檔是 PNG，請把頁首和 `<link rel="icon">` 改指向 PNG 檔，再重新產生這兩個小圖示。
 
 ## 部署到 GitHub Pages
 
