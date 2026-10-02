@@ -11,6 +11,7 @@ import {
   tierFor,
 } from "../lib/shipping";
 import { discountPercent, ntd, subline } from "../lib/format";
+import { copyAndOpenLine } from "../lib/line";
 import type { ProductView } from "../lib/types";
 
 // 商品頁右側的下單面板：選寄送方式與保價，即時算出合計並導向下單管道
@@ -60,13 +61,7 @@ export default function OrderPanel({ p }: { p: ProductView }) {
   }, [p, qty, method, q, c.kind]);
 
   async function orderByLine() {
-    try {
-      await navigator.clipboard.writeText(orderText);
-      setCopied("ok");
-    } catch {
-      setCopied("fail");
-    }
-    window.open(shop.lineUrl, "_blank", "noopener");
+    setCopied((await copyAndOpenLine(orderText)) ? "ok" : "fail");
   }
 
   return (

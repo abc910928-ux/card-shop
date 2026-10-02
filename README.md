@@ -84,5 +84,5 @@ src/
     ShopBrowser.tsx       列表頁的篩選、搜尋、排序（互動元件）
     OrderPanel.tsx        商品頁的寄送方式、加保、下單（互動元件）
     ProductCard.tsx       商品卡片
-  pages/                  首頁、/shop/、/item/[id]/、/guide/
+  pages/                  首頁、/shop/、/item/[id]/、/guide/、/proxy/snkrdunk/（代購詢價）、/terms/（條款）
 ```

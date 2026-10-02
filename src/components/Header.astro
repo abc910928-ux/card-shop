@@ -7,6 +7,7 @@ const path = Astro.url.pathname;
 const nav = [
   { href: url("/shop/"), label: "全部商品" },
   ...categories.map((c) => ({ href: url(`/shop/?category=${encodeURIComponent(c)}`), label: c })),
+  { href: url("/proxy/snkrdunk/"), label: "SNKRDUNK代購" },
   { href: url("/guide/"), label: "購物說明" },
 ];
 ---
