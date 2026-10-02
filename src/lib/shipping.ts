@@ -20,9 +20,10 @@ export function coverageOf<K extends Coverage["kind"]>(id: ShippingId, kind: K) 
 export const rateCoverage = () => coverageOf("tcat", "rate");
 export const tiersCoverage = () => coverageOf("711", "tiers");
 
-/** 運費顯示文字：級距制顯示「NT$60 起」 */
+/** 運費顯示文字：級距制顯示「NT$60 起」；可加保的（黑貓）顯示「NT$150 起」 */
 export function feeLabel(m: ShippingMethod): string {
-  return m.coverage.kind === "tiers" ? `${ntd(m.coverage.tiers[0].fee)} 起` : ntd(m.fee);
+  if (m.coverage.kind === "tiers") return `${ntd(m.coverage.tiers[0].fee)} 起`;
+  return m.coverage.kind === "rate" ? `${ntd(m.fee)} 起` : ntd(m.fee);
 }
 
 /** 這件商品提供哪些寄送方式（沒開賣貨便的商品不顯示賣貨便） */

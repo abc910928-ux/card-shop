@@ -10,7 +10,7 @@ export const shop = {
 
   // 頂部公告條
   announcements: [
-    "7-11 賣貨便 38 元・交貨便 60 元起・黑貓宅配 130 元",
+    "7-11 賣貨便 38 元・交貨便 60 元起・黑貓宅配 150 元起",
     "交貨便可選申報價值，黑貓宅配可加保，高價卡寄送更安心",
   ],
 
@@ -140,7 +140,7 @@ export const shippingMethods: ShippingMethod[] = [
     id: "tcat",
     label: "黑貓宅急便（宅配到府）",
     short: "黑貓宅配",
-    fee: 130,
+    fee: 150,
     feeNote: "常溫 60 公分以下（卡牌包裹都在這級距）",
     payment: "銀行轉帳",
     maxValue: 50000,
