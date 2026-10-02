@@ -1,0 +1,10 @@
+---
+import Base from "../../layouts/Base.astro";
+import OrderView from "../../components/OrderView";
+---
+
+<Base title="訂單查詢" noindex>
+  <section class="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+    <OrderView client:load />
+  </section>
+</Base>

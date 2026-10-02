@@ -58,6 +58,10 @@ export const api = {
   // 現貨訂單訪客也能建立（占用庫存）；預購、代購需要登入
   createOrder: (o: NewOrder) => call<Order>("POST", "/orders", o, o.kind === "stock" ? "optional" : "required"),
   cancelOrder: (id: number) => call<Order>("POST", `/orders/${id}/cancel`),
+  reportPayment: (id: number, last5: string) => call<Order>("POST", `/orders/${id}/report`, { last5 }),
+  // 訪客用訂單編號＋下單電話查詢／取消／回報匯款
+  guestOrder: (code: string, phone: string, action: "get" | "cancel" | "report" = "get", last5?: string) =>
+    call<Order>("POST", "/guest/order", { code, phone, action, last5 }, "none"),
 
   wishlist: () => call<WishItem[]>("GET", "/wishlist"),
   // price / stock 只給假後端用；正式 API 以伺服器端的商品資料為準

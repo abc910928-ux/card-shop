@@ -1,6 +1,7 @@
 ---
 import { shop } from "../config/shop";
 import AuthButton from "./AuthButton";
+import CartButton from "./CartButton";
 import { categories } from "../lib/types";
 import { url } from "../lib/url";
 
@@ -14,12 +15,12 @@ const nav = [
 ---
 
 <header class="sticky top-0 z-40 bg-ink text-white">
-  <div class="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6">
+  <div class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:gap-4 sm:px-6">
     <a href={url("/")} class="flex shrink-0 items-center gap-2.5">
       <img src={url("/logo.svg")} alt="" width="36" height="36" class="h-9 w-9" />
       <span class="leading-tight">
         <span class="block text-base font-bold tracking-wide">{shop.name}</span>
-        <span class="block font-display text-[10px] tracking-widest text-white/50">{shop.tagline}</span>
+        <span class="hidden font-display text-[10px] tracking-widest text-white/50 sm:block">{shop.tagline}</span>
       </span>
     </a>
 
@@ -32,7 +33,7 @@ const nav = [
       />
     </form>
 
-    <div class="ml-auto flex items-center gap-2 md:ml-0">
+    <div class="ml-auto flex items-center gap-1.5 sm:gap-2 md:ml-0">
       {
         shop.myshipStoreUrl && (
           <a
@@ -53,6 +54,7 @@ const nav = [
       >
         LINE 詢問
       </a>
+      <CartButton client:load />
       <AuthButton client:load />
     </div>
   </div>

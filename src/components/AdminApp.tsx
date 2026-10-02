@@ -10,6 +10,7 @@ import {
   HOLD_HOURS,
   STAGES,
   isOverdue,
+  itemLabel,
   kindLabel,
   nextStep,
   payDeadline,
@@ -104,8 +105,7 @@ function Orders({ onToast }: { onToast: (s: string) => void }) {
     load();
   }, []);
 
-  const inStage = (o: Order, id: string) =>
-    id === "all" ? true : (STAGES.find((s) => s.id === id)?.statuses ?? []).includes(o.status);
+  const inStage = (o: Order, id: string) => id === "all" || !!STAGES.find((s) => s.id === id)?.match(o);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: orders?.length ?? 0 };
@@ -283,6 +283,9 @@ function OrderCard({
           <span class="rounded border border-line px-1.5 py-px text-[11px] text-ink-soft">{kindLabel[o.kind]}</span>
           <span class={`rounded px-2 py-0.5 text-xs font-medium ${statusTone[o.status]}`}>{statusLabel[o.status]}</span>
           {overdue && <span class="rounded bg-sale px-2 py-0.5 text-xs font-bold text-white">逾期未付款</span>}
+          {o.payment?.report && o.status === "confirmed" && (
+            <span class="rounded bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">買家已回報匯款</span>
+          )}
           {holdExpired && (
             <span class="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">超過 {HOLD_HOURS} 小時未確認，庫存已釋出</span>
           )}
@@ -292,7 +295,7 @@ function OrderCard({
         <div class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
           <Field label="買家">
             {o.guest ? (
-              <span class="text-muted">訪客（請對照 LINE 訊息裡的訂單編號）</span>
+              <span class="text-muted">訪客（未登入，靠收件電話聯絡）</span>
             ) : (
               <>
                 {o.member?.displayName}
@@ -319,7 +322,7 @@ function OrderCard({
                     {i.name}
                   </a>
                 ) : (
-                  i.name
+                  itemLabel(i)
                 )}{" "}
                 × {i.qty}
                 {i.spec && <span class="text-muted">（{i.spec}）</span>}
@@ -335,6 +338,19 @@ function OrderCard({
                 {o.shipping.insured ? "（加保）" : ""}
               </span>
               <span>{ntd(o.shipping.fee + (o.shipping.insuranceFee ?? 0))}</span>
+            </li>
+          )}
+          {o.payment && (
+            <li class="flex justify-between text-ink-soft">
+              <span>
+                付款：{o.payment.label}
+                {o.payment.report && (
+                  <span class="ml-1 text-emerald-700">
+                    （回報末五碼 {o.payment.report.last5}・{new Date(o.payment.report.at).toLocaleString("zh-TW")}）
+                  </span>
+                )}
+              </span>
+              {o.payment.fee > 0 && <span>{ntd(o.payment.fee)}</span>}
             </li>
           )}
           {o.total > 0 && (

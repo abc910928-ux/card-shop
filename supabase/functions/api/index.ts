@@ -4,6 +4,8 @@
 //   LINE_LOGIN_CHANNEL_ID  LINE Login 頻道 ID（驗證 token 是發給我們的頻道）
 //   ADMIN_LINE_USER_IDS    管理員的 LINE userId，多個用逗號分隔
 //   SITE_URL               網站網址，例：https://abc910928-ux.github.io/card-shop
+//   LINE_MESSAGING_TOKEN   （選填）官方帳號 Messaging API 的 channel access token：有新訂單時推播通知店家
+//   NOTIFY_LINE_USER_IDS   （選填）要收通知的 LINE userId，多個用逗號分隔；沒填就通知所有管理員
 // SUPABASE_URL、SUPABASE_SECRET_KEYS（或舊版 SUPABASE_SERVICE_ROLE_KEY）由 Supabase 自動提供。
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -13,6 +15,11 @@ const ADMINS = (Deno.env.get("ADMIN_LINE_USER_IDS") ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 const SITE_URL = (Deno.env.get("SITE_URL") ?? "").replace(/\/$/, "");
+const LINE_TOKEN = Deno.env.get("LINE_MESSAGING_TOKEN") ?? "";
+const NOTIFY_TO = (Deno.env.get("NOTIFY_LINE_USER_IDS") || Deno.env.get("ADMIN_LINE_USER_IDS") || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 const ALLOWED_ORIGINS = new Set(
   [SITE_URL && new URL(SITE_URL).origin, "http://localhost:3020"].filter(Boolean) as string[],
 );
@@ -92,19 +99,33 @@ async function verifyLine(token: string): Promise<LineUser> {
 }
 
 // ─── 商品資料（網站建置時輸出的 products.json）──────────
-type Product = { id: string; name: string; price: number; stock: number; preorder: { limit?: number } | null };
-let productCache: { at: number; list: Product[] } | null = null;
-async function products(): Promise<Product[]> {
-  if (productCache && Date.now() - productCache.at < 60_000) return productCache.list;
-  const res = await fetch(`${SITE_URL}/products.json`);
-  if (!res.ok) throw new HttpError(503, "暫時無法讀取商品資料，請稍後再試");
-  const list = (await res.json()).products as Product[];
-  productCache = { at: Date.now(), list };
-  return list;
-}
-
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
+type Variant = { id: string; name: string; price: number; stock: number };
+type Product = {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  preorder: { limit?: number } | null;
+  payments?: string[];
+  variants?: Variant[] | null;
+};
+type Catalog = { products: Product[]; shipping: Row[]; payments: Row[] };
+let catalogCache: { at: number; data: Catalog } | null = null;
+async function catalog(): Promise<Catalog> {
+  if (catalogCache && Date.now() - catalogCache.at < 60_000) return catalogCache.data;
+  const res = await fetch(`${SITE_URL}/products.json`);
+  if (!res.ok) throw new HttpError(503, "暫時無法讀取商品資料，請稍後再試");
+  const j = await res.json();
+  const data = { products: j.products ?? [], shipping: j.shipping ?? [], payments: j.payments ?? [] };
+  catalogCache = { at: Date.now(), data };
+  return data;
+}
+const products = async () => (await catalog()).products;
+
+// 庫存單位：沒有規格的商品就是商品 id；有規格的是「商品id:規格id」（與網站 src/lib/sku.ts 相同）
+const skuOf = (productId: string, variantId?: string | null) => (variantId ? `${productId}:${variantId}` : productId);
 
 // ─── 庫存 ──────────────────────────────────────────────
 // 剩餘 = 商品檔的 stock（進貨總數）＋ 手動調整 − 有效訂單占用的數量
@@ -116,7 +137,16 @@ function holdsStock(o: Row): boolean {
   return true;
 }
 
-type Stock = { id: string; name: string; preorder: boolean; base: number; adjust: number; sold: number; available: number };
+type Stock = {
+  id: string; // SKU
+  productId: string;
+  name: string;
+  preorder: boolean;
+  base: number;
+  adjust: number;
+  sold: number;
+  available: number;
+};
 async function inventory(excludeOrderId?: number): Promise<Map<string, Stock>> {
   const [list, orders, adjusts] = await Promise.all([
     products(),
@@ -124,7 +154,12 @@ async function inventory(excludeOrderId?: number): Promise<Map<string, Stock>> {
     db.from("inventory_adjustments").select("product_id, delta"),
   ]);
   const map = new Map<string, Stock>();
-  for (const p of list) map.set(p.id, { id: p.id, name: p.name, preorder: !!p.preorder, base: p.stock, adjust: 0, sold: 0, available: 0 });
+  for (const p of list) {
+    const base = { productId: p.id, preorder: !!p.preorder, adjust: 0, sold: 0, available: 0 };
+    if (p.variants?.length) {
+      for (const v of p.variants) map.set(skuOf(p.id, v.id), { ...base, id: skuOf(p.id, v.id), name: `${p.name}（${v.name}）`, base: v.stock });
+    } else map.set(p.id, { ...base, id: p.id, name: p.name, base: p.stock });
+  }
   for (const a of check(adjusts)) {
     const s = map.get(a.product_id);
     if (s) s.adjust += a.delta;
@@ -132,7 +167,7 @@ async function inventory(excludeOrderId?: number): Promise<Map<string, Stock>> {
   for (const o of check(orders)) {
     if (o.id === excludeOrderId || !holdsStock(o)) continue;
     for (const i of o.items) {
-      const s = i.productId && map.get(i.productId);
+      const s = i.productId && map.get(skuOf(i.productId, i.variantId));
       if (s) s.sold += i.qty;
     }
   }
@@ -140,24 +175,98 @@ async function inventory(excludeOrderId?: number): Promise<Map<string, Stock>> {
   return map;
 }
 
-/** 訂單要開始占用庫存時，確認數量還夠 */
+/** 訂單要開始占用庫存時，確認數量還夠（同一個 SKU 出現多次會合併計算） */
 async function ensureAvailable(items: Row[], excludeOrderId?: number) {
   const inv = await inventory(excludeOrderId);
-  for (const i of items) {
-    if (!i.productId) continue;
-    const s = inv.get(i.productId);
-    if (!s) throw new HttpError(400, `「${i.name}」已下架`);
-    if (i.qty > s.available) throw new HttpError(409, `「${i.name}」庫存不足（剩 ${s.available} 個）`);
+  const need = new Map<string, number>();
+  for (const i of items) if (i.productId) need.set(skuOf(i.productId, i.variantId), (need.get(skuOf(i.productId, i.variantId)) ?? 0) + i.qty);
+  for (const [sku, qty] of need) {
+    const s = inv.get(sku);
+    if (!s) throw new HttpError(400, "有商品已下架，請重新整理");
+    if (qty > s.available) throw new HttpError(409, `「${s.name}」庫存不足（剩 ${s.available} 個）`);
   }
 }
 
+/** 公開庫存：每個 SKU，再加上有規格商品的合計（列表頁用商品 id 查） */
 let stockCache: { at: number; data: Record<string, number> } | null = null;
 async function publicStock(): Promise<Record<string, number>> {
   if (stockCache && Date.now() - stockCache.at < 10_000) return stockCache.data;
   const data: Record<string, number> = {};
-  for (const s of (await inventory()).values()) data[s.id] = s.available;
+  for (const s of (await inventory()).values()) {
+    data[s.id] = s.available;
+    if (s.id !== s.productId) data[s.productId] = (data[s.productId] ?? 0) + s.available;
+  }
   stockCache = { at: Date.now(), data };
   return data;
+}
+
+// ─── 運費（與網站 src/lib/shipping.ts 的 quote 相同，設定來自 products.json）──
+function shipQuote(m: Row, goods: number, insure: boolean, declared?: number) {
+  const c = m.coverage;
+  let fee = m.fee;
+  let insured = false;
+  let insuranceFee = 0;
+  let declaredValue = 0;
+  if (c.kind === "tiers") {
+    const tier =
+      (declared && c.tiers.find((t: Row) => t.upTo === declared)) ||
+      c.tiers.find((t: Row) => t.upTo >= goods) ||
+      c.tiers[c.tiers.length - 1];
+    fee = tier.fee;
+    declaredValue = tier.upTo;
+  } else if (c.kind === "rate") {
+    insured = insure || goods > c.requiredAbove;
+    insuranceFee = insured ? Math.ceil(Math.min(goods, c.maxValue) * c.rate) : 0;
+    declaredValue = insured ? Math.min(goods, c.maxValue) : 0;
+  }
+  return { fee, insured, insuranceFee, declaredValue };
+}
+
+// ─── LINE 通知店家（Messaging API push；沒設定 token 就略過）──
+async function notifyShop(text: string) {
+  if (!LINE_TOKEN || NOTIFY_TO.length === 0) return;
+  const send = Promise.all(
+    NOTIFY_TO.map((to) =>
+      fetch("https://api.line.me/v2/bot/message/push", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LINE_TOKEN}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ to, messages: [{ type: "text", text: text.slice(0, 4900) }] }),
+        signal: AbortSignal.timeout(5000),
+      })
+        .then(async (r) => {
+          if (!r.ok) console.error("LINE push 失敗", r.status, await r.text());
+        })
+        .catch((e) => console.error("LINE push 錯誤", e)),
+    ),
+  );
+  // 回應買家不用等通知送完
+  // deno-lint-ignore no-explicit-any
+  const rt = (globalThis as any).EdgeRuntime;
+  if (rt?.waitUntil) rt.waitUntil(send);
+  else await send;
+}
+
+const ntd = (n: number) => `NT$${n.toLocaleString("en-US")}`;
+function orderMessage(o: Row, buyer: string): string {
+  const head = { stock: "🛒 新訂單", preorder: "📦 新預購", proxy: "🌏 新代購詢價" }[o.kind as string] ?? "新訂單";
+  const lines = [`${head} ${o.code}`, `買家：${buyer}`];
+  for (const i of o.items) {
+    const name = i.variant ? `${i.name}（${i.variant}）` : i.name;
+    lines.push(`・${name} ×${i.qty}${i.price > 0 ? `　${ntd(i.price * i.qty)}` : ""}${i.url ? `\n  ${i.url}` : ""}`);
+  }
+  const s = o.shipping;
+  if (s) {
+    const extra = (s.declaredValue && !s.insured ? `（申報 ${ntd(s.declaredValue)}）` : "") + (s.insured ? "（加保）" : "");
+    lines.push(`寄送：${s.label}${extra}　${ntd(s.fee + (s.insuranceFee ?? 0))}`);
+  }
+  if (o.payment) lines.push(`付款：${o.payment.label}`);
+  if (o.total > 0) lines.push(`合計：${ntd(o.total)}`);
+  const r = o.recipient ?? {};
+  const to = [r.name, r.phone, r.store ?? r.address].filter(Boolean).join(" / ");
+  if (to) lines.push(`收件：${to}`);
+  if (o.note) lines.push(`備註：${o.note}`);
+  lines.push("", `後台：${SITE_URL}/admin/`);
+  return lines.join("\n");
 }
 
 // ─── 資料轉換 ──────────────────────────────────────────
@@ -178,6 +287,7 @@ const orderOut = (r: Row) => ({
   kind: r.kind,
   items: r.items,
   shipping: r.shipping,
+  payment: r.payment ?? null,
   recipient: r.recipient,
   total: r.total,
   status: r.status,
@@ -211,7 +321,9 @@ const wishOut = (r: Row) => ({
   createdAt: r.created_at,
 });
 
-function check<T>(res: { data: T; error: { message: string } | null }): T {
+// 沒有產生資料表型別，查詢結果一律當成 any（Row 或 Row[]）；maybeSingle 找不到時是 null，呼叫端自己判斷
+// deno-lint-ignore no-explicit-any
+function check(res: { data: unknown; error: { message: string } | null }): any {
   if (res.error) throw new HttpError(500, `資料庫錯誤：${res.error.message}`);
   return res.data;
 }
@@ -246,6 +358,7 @@ async function handle(req: Request): Promise<unknown> {
     return { ok: true };
   }
   if (route === "stock" && m === "GET") return await publicStock();
+  if (route === "guest/order" && m === "POST") return await guestOrder(body);
 
   const token = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
   // 訪客也能下現貨訂單（只記錄訂單與占用庫存，聯絡一律走 LINE）
@@ -294,21 +407,11 @@ async function handle(req: Request): Promise<unknown> {
     return rows.map(orderOut);
   }
   if (route === "orders" && m === "POST") return await createOrder(line.userId, me, body);
-  if (parts[0] === "orders" && parts[2] === "cancel" && m === "POST") {
-    // 買家自行取消：還沒付款（預購還沒到貨）前都可以
+  if (parts[0] === "orders" && parts[1] && parts[2] && m === "POST") {
     const o = check(await db.from("orders").select().eq("id", Number(parts[1])).eq("line_user_id", line.userId).maybeSingle());
     if (!o) throw new HttpError(404, "找不到訂單");
-    if (!["pending", "confirmed"].includes(o.status)) throw new HttpError(409, "這筆訂單目前無法自行取消，請 LINE 聯絡我們");
-    const row = check(
-      await db
-        .from("orders")
-        .update({ status: "cancelled", status_history: [...(o.status_history ?? []), historyEntry("cancelled", "buyer", "買家自行取消")] })
-        .eq("id", o.id)
-        .select()
-        .single(),
-    );
-    stockCache = null;
-    return orderOut(row);
+    if (parts[2] === "cancel") return await buyerCancel(o);
+    if (parts[2] === "report") return await reportPayment(o, body.last5, me.display_name);
   }
 
   // ── 收藏 ──
@@ -317,13 +420,14 @@ async function handle(req: Request): Promise<unknown> {
     return rows.map(wishOut);
   }
   if (parts[0] === "wishlist" && parts[1] && m === "PUT") {
-    const s = (await inventory()).get(parts[1]);
-    if (!s) throw new HttpError(404, "找不到這件商品");
-    const p = (await products()).find((x) => x.id === s.id)!;
+    const p = (await products()).find((x) => x.id === parts[1]);
+    if (!p) throw new HttpError(404, "找不到這件商品");
+    const available = (await publicStock())[p.id] ?? 0;
+    const price = p.variants?.length ? Math.min(...p.variants.map((v) => v.price)) : p.price;
     const row = check(
       await db
         .from("wishlist")
-        .upsert({ line_user_id: line.userId, product_id: p.id, price_at_add: p.price, stock_at_add: s.available })
+        .upsert({ line_user_id: line.userId, product_id: p.id, price_at_add: price, stock_at_add: available })
         .select()
         .single(),
     );
@@ -381,8 +485,8 @@ async function handle(req: Request): Promise<unknown> {
       return [...(await inventory()).values()];
     }
     if (route === "admin/inventory" && m === "POST") {
-      const id = str(body.productId, 100);
-      if (!id || !(await products()).some((p) => p.id === id)) throw new HttpError(400, "找不到這件商品");
+      const id = str(body.productId, 100); // SKU
+      if (!id || !(await inventory()).has(id)) throw new HttpError(400, "找不到這件商品");
       const delta = int(body.delta, -999, 999);
       if (delta === 0) throw new HttpError(400, "數量不能是 0");
       check(await db.from("inventory_adjustments").insert({ product_id: id, delta, note: str(body.note, 100) }));
@@ -401,6 +505,7 @@ async function createOrder(userId: string | null, me: Row | null, body: Row) {
   if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 20) throw new HttpError(400, "商品內容錯誤");
   if (kind === "preorder" && me?.preorder_blocked) throw new HttpError(403, "你的帳號目前無法預購，請 LINE 聯絡我們");
 
+  const cat = await catalog();
   let items: Row[];
   if (kind === "proxy") {
     // 代購詢價：還沒報價，金額為 0
@@ -410,13 +515,17 @@ async function createOrder(userId: string | null, me: Row | null, body: Row) {
       return { name: str(i.name, 100) ?? "海外代購商品", price: 0, qty: int(i.qty, 1, 99), url: link, spec: str(i.spec, 200) };
     });
   } else {
-    // 現貨／預購：商品與單價以網站商品資料為準，不信任前端送來的價格
-    const list = await products();
+    // 現貨／預購：商品、規格與單價以網站商品資料為準，不信任前端送來的價格
     items = [];
     for (const i of body.items) {
-      const p = list.find((x) => x.id === i.productId);
-      if (!p) throw new HttpError(400, "商品已下架或不存在");
-      const qty = int(i.qty, 1, userId ? 99 : 10);
+      const p = cat.products.find((x) => x.id === i.productId);
+      if (!p) throw new HttpError(400, "商品已下架或不存在，請重新整理");
+      let variant: Variant | undefined;
+      if (p.variants?.length) {
+        variant = p.variants.find((v) => v.id === i.variantId);
+        if (!variant) throw new HttpError(400, `請選擇「${p.name}」的規格`);
+      }
+      const qty = int(i.qty, 1, userId ? 99 : 20);
       if (kind === "preorder" && !p.preorder) throw new HttpError(400, `「${p.name}」不是預購商品`);
       if (kind === "stock" && p.preorder) throw new HttpError(400, `「${p.name}」是預購商品，請用預購登記`);
       if (kind === "preorder" && p.preorder?.limit) {
@@ -426,28 +535,53 @@ async function createOrder(userId: string | null, me: Row | null, body: Row) {
         const already = mine.flatMap((o: Row) => o.items).filter((x: Row) => x.productId === p.id).reduce((s: number, x: Row) => s + x.qty, 0);
         if (already + qty > p.preorder.limit) throw new HttpError(409, `「${p.name}」每人限購 ${p.preorder.limit} 個，你已登記 ${already} 個`);
       }
-      items.push({ productId: p.id, name: p.name, price: p.price, qty });
+      items.push({
+        productId: p.id,
+        ...(variant ? { variantId: variant.id, variant: variant.name } : {}),
+        name: p.name,
+        price: variant?.price ?? p.price,
+        qty,
+      });
     }
     await ensureAvailable(items); // 自動扣庫存：數量不夠就不成立
   }
+  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
 
+  // 現貨：寄送方式、保價與付款方式都在網站結帳時決定，金額由這裡重新計算
   let shipping: Row | null = null;
-  if (kind === "stock" && body.shipping) {
-    const s = body.shipping;
-    shipping = {
-      method: str(s.method, 20),
-      label: str(s.label, 30),
-      fee: int(s.fee, 0, 10000),
-      declaredValue: s.declaredValue === undefined ? undefined : int(s.declaredValue, 0, 100000),
-      insured: !!s.insured,
-      insuranceFee: s.insuranceFee === undefined ? undefined : int(s.insuranceFee, 0, 10000),
-    };
-  }
+  let payment: Row | null = null;
   const r = body.recipient ?? {};
   const recipient = { name: str(r.name, 30), phone: str(r.phone, 20), store: str(r.store, 40), address: str(r.address, 120) };
+  if (kind === "stock") {
+    const s = body.shipping ?? {};
+    const method = cat.shipping.find((x) => x.id === s.method && !x.requiresMyship);
+    if (!method) throw new HttpError(400, "請選擇寄送方式");
+    if (method.maxValue !== undefined && subtotal > method.maxValue) throw new HttpError(400, `${method.short}：${method.maxValueReason ?? "超過金額上限"}`);
+    const declared = s.declaredValue === undefined ? undefined : int(s.declaredValue, 0, 1000000);
+    const q = shipQuote(method, subtotal, !!s.insured, declared);
+    shipping = {
+      method: method.id,
+      label: method.short,
+      fee: q.fee,
+      ...(q.declaredValue ? { declaredValue: q.declaredValue } : {}),
+      insured: q.insured,
+      ...(q.insuranceFee ? { insuranceFee: q.insuranceFee } : {}),
+    };
 
-  const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
-  const total = subtotal + (shipping ? shipping.fee + (shipping.insuranceFee ?? 0) : 0);
+    const pm = cat.payments.find((x) => x.id === body.payment?.method);
+    if (!pm) throw new HttpError(400, "請選擇付款方式");
+    const prods = items.map((i) => cat.products.find((p) => p.id === i.productId)!);
+    if (prods.some((p) => !(p.payments ?? ["transfer", "cod"]).includes(pm.id))) throw new HttpError(400, `有商品不接受「${pm.label}」`);
+    if (!pm.shipping.includes(method.id)) throw new HttpError(400, `${method.short}不能用「${pm.label}」`);
+    const before = subtotal + q.fee + q.insuranceFee + pm.fee;
+    if (pm.maxAmount !== undefined && before > pm.maxAmount) throw new HttpError(400, `「${pm.label}」金額上限為 ${ntd(pm.maxAmount)}`);
+    payment = { method: pm.id, label: pm.label, fee: pm.fee };
+
+    if (!recipient.name) throw new HttpError(400, "請填收件人姓名");
+    if (!/^09\d{8}$/.test((recipient.phone ?? "").replace(/\D/g, ""))) throw new HttpError(400, "請填正確的手機號碼");
+    if (method.id === "tcat" ? !recipient.address : !recipient.store) throw new HttpError(400, method.id === "tcat" ? "請填宅配地址" : "請填取貨門市");
+  }
+  const total = subtotal + (shipping ? shipping.fee + (shipping.insuranceFee ?? 0) : 0) + (payment?.fee ?? 0);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await db
@@ -459,6 +593,7 @@ async function createOrder(userId: string | null, me: Row | null, body: Row) {
         kind,
         items,
         shipping,
+        payment,
         recipient,
         total,
         note: str(body.note, 300),
@@ -468,11 +603,57 @@ async function createOrder(userId: string | null, me: Row | null, body: Row) {
       .single();
     if (!res.error) {
       stockCache = null;
+      await notifyShop(orderMessage(res.data, me?.display_name ?? `訪客（${recipient.name ?? "未填姓名"}）`));
       return orderOut(res.data);
     }
     if (res.error.code !== "23505") throw new HttpError(500, `資料庫錯誤：${res.error.message}`); // 23505 = 訂單編號重複，重試
   }
   throw new HttpError(500, "建立訂單失敗，請再試一次");
+}
+
+/** 買家自行取消：還沒付款（預購還沒到貨）前都可以 */
+async function buyerCancel(o: Row) {
+  if (!["pending", "confirmed"].includes(o.status)) throw new HttpError(409, "這筆訂單目前無法自行取消，請 LINE 聯絡我們");
+  const row = check(
+    await db
+      .from("orders")
+      .update({ status: "cancelled", status_history: [...(o.status_history ?? []), historyEntry("cancelled", "buyer", "買家自行取消")] })
+      .eq("id", o.id)
+      .select()
+      .single(),
+  );
+  stockCache = null;
+  await notifyShop(`❎ 買家取消訂單 ${o.code}\n${SITE_URL}/admin/`);
+  return orderOut(row);
+}
+
+/** 買家回報匯款（帳號末五碼），通知店家核對 */
+async function reportPayment(o: Row, last5: unknown, buyer: string) {
+  if (typeof last5 !== "string" || !/^\d{5}$/.test(last5)) throw new HttpError(400, "請輸入 5 位數字");
+  if (o.payment?.method !== "transfer") throw new HttpError(400, "這筆訂單不是銀行轉帳");
+  if (!["pending", "confirmed", "arrived"].includes(o.status)) throw new HttpError(409, "這筆訂單目前不需要回報匯款");
+  const row = check(
+    await db
+      .from("orders")
+      .update({ payment: { ...o.payment, report: { last5, at: new Date().toISOString() } } })
+      .eq("id", o.id)
+      .select()
+      .single(),
+  );
+  await notifyShop(`💰 ${o.code} 回報已匯款\n買家：${buyer}\n金額：${ntd(o.total)}\n帳號末五碼：${last5}\n${SITE_URL}/admin/`);
+  return orderOut(row);
+}
+
+/** 訪客查詢訂單：訂單編號＋下單時填的手機號碼 */
+async function guestOrder(body: Row) {
+  const code = (str(body.code, 30) ?? "").toUpperCase();
+  const phone = (str(body.phone, 20) ?? "").replace(/\D/g, "");
+  if (!code || phone.length < 8) throw new HttpError(400, "請填訂單編號與手機號碼");
+  const o = check(await db.from("orders").select().eq("code", code).maybeSingle());
+  if (!o || (o.recipient?.phone ?? "").replace(/\D/g, "") !== phone) throw new HttpError(404, "找不到訂單，請確認訂單編號與手機號碼");
+  if (body.action === "cancel") return await buyerCancel(o);
+  if (body.action === "report") return await reportPayment(o, body.last5, `訪客（${o.recipient?.name ?? ""}）`);
+  return orderOut(o);
 }
 
 Deno.serve(async (req) => {

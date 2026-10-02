@@ -8,14 +8,16 @@ import { url } from "../lib/url";
 import { refreshStock } from "../lib/stock";
 import {
   BUYER_CANCELLABLE,
+  buyerStatus,
   isOverdue,
+  itemLabel,
   kindLabel,
   payDeadline,
-  statusLabel,
   statusTone,
   type Order,
   type ProfileInput,
 } from "../lib/orders";
+import OrderTimeline from "./OrderTimeline";
 
 export type WishProduct = {
   id: string;
@@ -202,7 +204,11 @@ function OrderList() {
   if (!orders) return <div class="h-40 animate-pulse rounded-2xl bg-surface" />;
   if (orders.length === 0)
     return (
-      <Notice title="還沒有訂單" body="登入後在網站上下單或預購，紀錄會出現在這裡。賣貨便的訂單請到賣貨便查詢。" />
+      <Notice title="還沒有訂單" body="登入後在網站上下單或預購，紀錄會出現在這裡。賣貨便的訂單請到賣貨便查詢。">
+        <a href={url("/order/")} class="mt-4 inline-block text-sm underline underline-offset-2">
+          沒登入時下的訂單？用訂單編號查詢
+        </a>
+      </Notice>
     );
 
   return (
@@ -210,23 +216,34 @@ function OrderList() {
       {orders.map((o) => (
         <li class="rounded-2xl border border-line bg-surface p-4">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="font-display font-bold">{o.code}</span>
+            <a href={url(`/order/?code=${o.code}`)} class="font-display font-bold hover:underline">
+              {o.code}
+            </a>
             <span class="rounded border border-line px-1.5 py-px text-[11px] text-ink-soft">{kindLabel[o.kind]}</span>
-            <span class={`rounded px-2 py-0.5 text-xs font-medium ${statusTone[o.status]}`}>{statusLabel[o.status]}</span>
+            <span class={`rounded px-2 py-0.5 text-xs font-medium ${statusTone[o.status]}`}>{buyerStatus(o)}</span>
             <span class="ml-auto text-xs text-muted">{new Date(o.createdAt).toLocaleDateString("zh-TW")}</span>
           </div>
-          <ul class="mt-2 space-y-0.5 text-sm text-ink-soft">
+          <div class="mt-4">
+            <OrderTimeline o={o} compact />
+          </div>
+          <ul class="mt-4 space-y-0.5 text-sm text-ink-soft">
             {o.items.map((i) => (
               <li class="flex justify-between gap-3">
                 <span class="min-w-0 truncate">
-                  {i.name} × {i.qty}
+                  {itemLabel(i)} × {i.qty}
                 </span>
                 {i.price > 0 && <span class="shrink-0">{ntd(i.price * i.qty)}</span>}
               </li>
             ))}
           </ul>
           <div class="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-2 text-sm">
-            <span class="text-muted">{o.shipping?.label ?? (o.kind === "proxy" ? "等待報價" : "到貨後選寄送方式")}</span>
+            <span class="text-muted">
+              {o.shipping
+                ? [o.shipping.label, o.payment?.label].filter(Boolean).join("・")
+                : o.kind === "proxy"
+                  ? "等待報價"
+                  : "到貨後選寄送方式"}
+            </span>
             {o.total > 0 && <span class="font-display font-bold">{ntd(o.total)}</span>}
           </div>
           {o.status === "arrived" && o.arrivedAt && (
@@ -235,15 +252,21 @@ function OrderList() {
               {isOverdue(o) && "（已超過付款期限，請盡快聯絡我們）"}
             </p>
           )}
+          {o.payment?.method === "transfer" && o.status === "confirmed" && !o.payment.report && (
+            <p class="mt-2 rounded-lg bg-accent/15 p-2 text-xs">訂單已確認，請到訂單頁查看匯款資訊。</p>
+          )}
           {o.tracking && <p class="mt-2 text-sm">物流單號：<span class="font-medium">{o.tracking}</span></p>}
           {o.note && <p class="mt-2 text-xs text-muted">店家備註：{o.note}</p>}
-          {BUYER_CANCELLABLE.includes(o.status) && (
-            <div class="mt-3 border-t border-line pt-2 text-right">
+          <div class="mt-3 flex items-center justify-end gap-4 border-t border-line pt-2">
+            {BUYER_CANCELLABLE.includes(o.status) && (
               <button onClick={() => cancel(o)} class="text-xs text-muted underline underline-offset-2 hover:text-sale">
                 取消訂單
               </button>
-            </div>
-          )}
+            )}
+            <a href={url(`/order/?code=${o.code}`)} class="text-xs font-medium underline underline-offset-2">
+              訂單詳情 →
+            </a>
+          </div>
         </li>
       ))}
     </ul>

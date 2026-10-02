@@ -89,6 +89,7 @@ export function ProductCard({ p, wish = false }: { p: ProductView; wish?: boolea
           <div class="flex flex-wrap items-baseline gap-x-1">
             <span class={`font-display text-base font-bold ${off > 0 ? "text-sale" : ""}`}>
               {ntd(p.price)}
+              {p.priceMax > p.price && <span class="ml-0.5 text-xs font-normal text-muted">起</span>}
             </span>
             {off > 0 && (
               <span class="text-[11px] text-muted line-through">{ntd(p.originalPrice!)}</span>
@@ -99,7 +100,9 @@ export function ProductCard({ p, wish = false }: { p: ProductView; wish?: boolea
               ? `預計 ${p.preorder.eta} 到貨`
               : soldOut
                 ? "已售完"
-                : `剩 ${p.stock} 件`}
+                : p.variants?.length
+                  ? `${p.variants.length} 種規格・剩 ${p.stock} 件`
+                  : `剩 ${p.stock} 件`}
           </div>
         </div>
       </div>

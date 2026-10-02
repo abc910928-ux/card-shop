@@ -2,10 +2,10 @@
 
 個人卡牌商店網站，可以賣單卡、原盒、鑑定卡和周邊。用 [Astro](https://astro.build) 建置成純靜態網站，免費部署在 GitHub Pages。
 
-- **7-11 賣貨便**：商品有填 `myshipUrl` 才會出現這個選項，點按鈕前往該商品的賣貨便頁面下單
-- **7-11 交貨便**：買家可選申報價值，運費 60–100 元，遺失最多賠到申報價值
-- **黑貓宅配**：可以選擇加保，保價費依商品金額計算
-- 交貨便與黑貓的訂單：按鈕會開啟 LINE 官方帳號並自動填好訂單內容，買家按送出後由你確認
+- **網站內結帳**：商品頁選規格與數量 →「加入購物車」或「直接購買」→ 結帳頁選寄送方式與保價、付款方式、填收件資料 → 送出訂單。買家在訂單頁看進度時間軸（待確認 → 備貨中 → 已出貨 → 完成），新訂單會用 LINE 推播通知你（設定見「新訂單 LINE 通知」）
+- **7-11 交貨便**：買家可選申報價值，運費 60–100 元，遺失最多賠到申報價值；可選銀行轉帳或取貨付款
+- **黑貓宅配**：可以選擇加保，保價費依商品金額計算；銀行轉帳
+- **7-11 賣貨便**：不在網站結帳；商品有填 `myshipUrl` 時，商品頁會多一個「也可以在 7-11 賣貨便下單」連結
 - **會員（LINE 登入）**：保存收件資料、訂單紀錄、收藏（補貨／降價提示）；**預購商品必須登入**，現貨不用。設定方式見下方「會員功能」
 
 ## 本機預覽
@@ -52,6 +52,20 @@ preorder:
   deadline: 10/31       # 選填：預購截止
   limit: 2              # 選填：每人限購
 ```
+
+**規格**（同一商品不同版本，例如語言版本）：加 `variants`，每個規格有自己的數量，價格沒填就用上面的 `price`。有規格時商品本身的 `stock` 不用填：
+
+```yaml
+variants:
+  - { id: jp, name: 日文版, stock: 3 }
+  - { id: en, name: 英文版, price: 2800, stock: 1 }
+```
+
+`id` 用英文小寫，上架後不要再改（訂單和庫存靠它對應）。
+
+**付款方式**：預設接受銀行轉帳和取貨付款；某件商品只收轉帳時加 `payments: [transfer]`。結帳時取購物車所有商品都接受的方式。取貨付款目前只搭配 7-11 交貨便（黑貓貨到付款要契約客戶且有手續費），可在 `src/config/shop.ts` 的 `paymentMethods` 改。
+
+**匯款帳號**：填在 `src/config/shop.ts` 的 `bank`，訂單確認後才會顯示在買家的訂單頁；沒填時會請買家 LINE 詢問。
 
 **商品照片**放在 `src/assets/products/`，直接放手機拍的 JPG 就好。建置時會自動壓縮、轉成 WebP 並產生縮圖。沒有照片的商品會顯示自動產生的示意圖。
 
@@ -118,6 +132,15 @@ node scripts/make-line-qr.mjs https://line.me/R/ti/p/%40你的ID
 - **訂單**：依狀態篩選、改狀態、寫備註（買家在「我的訂單」看得到備註）。預購到貨時改成「已到貨・待付款」，系統會記下日期並在 3 天後標示「逾期未付款」
 - **會員**：每位會員的訂單數與棄單數；可勾「停止受理預購」（預購服務條款第七條）
 
+### 新訂單 LINE 通知
+有新訂單、買家取消或回報匯款時，用官方帳號推播給你（每則占官方帳號每月免費訊息額度 1 則）：
+1. 到 LINE Official Account Manager → 設定 → Messaging API → 啟用，**Provider 選「TCG代購」**（和 LINE Login 同一個，選了就不能改）
+2. 到 LINE Developers → TCG代購 → 新出現的 Messaging API 頻道 → Messaging API 分頁 → Channel access token (long-lived) 按 Issue
+3. 到 Supabase → Edge Functions → Secrets，新增 `LINE_MESSAGING_TOKEN`，值貼上剛才的 token（token 等同密碼，只貼在這裡）
+4. 用你自己的 LINE 加官方帳號好友（沒加好友收不到推播）
+
+預設通知所有管理員（`ADMIN_LINE_USER_IDS`）；要通知別人可另設 `NOTIFY_LINE_USER_IDS`。沒設定 token 時網站照常運作，只是不推播。
+
 ### 本機測試（不用真的登入 LINE）
 在專案資料夾建立 `.env.development.local`，內容寫 `PUBLIC_AUTH_MOCK=1`，重新執行 `npm run dev`，就會用假帳號與假資料（存在瀏覽器裡）測試所有會員畫面。測完刪掉這個檔案。
 
@@ -142,12 +165,15 @@ src/
   lib/api.ts              會員 API 呼叫（mock-api.ts 是本機測試用假後端）
   components/
     ShopBrowser.tsx       列表頁的篩選、搜尋、排序（互動元件）
-    OrderPanel.tsx        現貨商品的寄送方式、加保、下單
+    OrderPanel.tsx        現貨商品頁：規格、數量、加入購物車／直接購買
+    CartApp.tsx           購物車＋結帳（寄送、保價、付款、收件資料）
+    OrderView.tsx         訂單頁（進度時間軸、匯款資訊與回報；訪客用訂單編號＋手機查詢）
     PreorderPanel.tsx     預購商品的登記（需登入）
     AccountApp.tsx        我的帳號：收件資料、訂單、收藏
     AdminApp.tsx          管理後台
     ProductCard.tsx       商品卡片
   pages/                  首頁、/shop/、/item/[id]/、/guide/、/proxy/（海外代購詢價）、
+                          /cart/（購物車・結帳）、/order/（訂單查詢）、
                           /account/、/admin/、/terms/（條款與隱私權政策）、products.json
 supabase/
   migrations/             資料庫結構

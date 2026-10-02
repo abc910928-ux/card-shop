@@ -2,9 +2,10 @@
 // 正式建置不會用到這個檔案。
 import { ApiError } from "./api";
 import { url } from "./url";
+import { skuOf, skusOf, type ProductJson } from "./sku";
 import { CANCELLED, HOLD_HOURS, type HistoryEntry, type Member, type NewOrder, type Order, type Profile, type WishItem } from "./orders";
 
-const KEY = "mock-db-v2";
+const KEY = "mock-db-v3";
 const ME = "Umock0000000000000000000000000001";
 
 type DbOrder = Order & { lineUserId: string | null; createdMs: number };
@@ -18,10 +19,11 @@ type Db = {
 
 const now = () => new Date().toISOString();
 const hist = (status: Order["status"], by: HistoryEntry["by"], note?: string): HistoryEntry => ({ status, at: now(), by, ...(note ? { note } : {}) });
+const digits = (s?: string | null) => (s ?? "").replace(/\D/g, "");
 
 function seed(): Db {
   const ago = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
-  const base = { shipping: null, tracking: null, guest: false, holdsStock: true, note: null } as const;
+  const base = { shipping: null, payment: null, tracking: null, guest: false, holdsStock: true, note: null } as const;
   return {
     profiles: {
       [ME]: { lineUserId: ME, displayName: "測試買家（管理員）", pictureUrl: null, realName: null, phone: null, storeName: null, address: null, preorderBlocked: false },
@@ -44,6 +46,8 @@ function seed(): Db {
         lineUserId: "Umock0000000000000000000000000002",
         kind: "stock",
         items: [{ productId: "tc-02-treasure-box", name: "海賊 TC-02寶藏箱", price: 3200, qty: 1 }],
+        shipping: { method: "711", label: "7-11 交貨便", fee: 90, declaredValue: 4000 },
+        payment: { method: "transfer", label: "銀行轉帳", fee: 0 },
         recipient: { name: "王小明", phone: "0912-000-000", store: "7-11 信義門市" },
         total: 3290,
         status: "paid",
@@ -83,24 +87,23 @@ function holds(o: DbOrder): boolean {
 const out = ({ lineUserId: _l, createdMs: _c, ...o }: DbOrder): Order => ({ ...o, holdsStock: holds({ ...o, lineUserId: null, createdMs: _c }) });
 
 async function inventory(db: Db, exclude?: number) {
-  const list: { id: string; name: string; stock: number; preorder: unknown }[] = (
-    await fetch(url("/products.json")).then((r) => r.json())
-  ).products;
-  return list.map((p) => {
-    const adjust = db.adjust.filter((a) => a.productId === p.id).reduce((s, a) => s + a.delta, 0);
+  const list: ProductJson[] = (await fetch(url("/products.json")).then((r) => r.json())).products;
+  return list.flatMap(skusOf).map((s) => {
+    const adjust = db.adjust.filter((a) => a.productId === s.sku).reduce((t, a) => t + a.delta, 0);
     const sold = db.orders
       .filter((o) => o.id !== exclude && holds(o))
       .flatMap((o) => o.items)
-      .filter((i) => i.productId === p.id)
-      .reduce((s, i) => s + i.qty, 0);
-    return { id: p.id, name: p.name, preorder: !!p.preorder, base: p.stock, adjust, sold, available: Math.max(0, p.stock + adjust - sold) };
+      .filter((i) => i.productId && skuOf(i.productId, i.variantId) === s.sku)
+      .reduce((t, i) => t + i.qty, 0);
+    return { id: s.sku, productId: s.productId, name: s.name, preorder: s.preorder, base: s.base, adjust, sold, available: Math.max(0, s.base + adjust - sold) };
   });
 }
 async function ensure(db: Db, items: Order["items"], exclude?: number) {
   const inv = await inventory(db, exclude);
   for (const i of items) {
-    const s = inv.find((x) => x.id === i.productId);
-    if (s && i.qty > s.available) throw new ApiError(409, `「${i.name}」庫存不足（剩 ${s.available} 個）`);
+    if (!i.productId) continue;
+    const s = inv.find((x) => x.id === skuOf(i.productId!, i.variantId));
+    if (s && i.qty > s.available) throw new ApiError(409, `「${s.name}」庫存不足（剩 ${s.available} 個）`);
   }
 }
 
@@ -121,8 +124,38 @@ export async function mockCall<T>(method: string, path: string, body?: unknown):
     save(db);
     return v as T;
   };
+  const cancel = (o: DbOrder) => {
+    if (!["pending", "confirmed"].includes(o.status)) throw new ApiError(409, "這筆訂單目前無法自行取消");
+    o.status = "cancelled";
+    o.history.push(hist("cancelled", "buyer", "買家自行取消"));
+    return done(out(o));
+  };
+  const report = (o: DbOrder, last5: unknown) => {
+    if (typeof last5 !== "string" || !/^\d{5}$/.test(last5)) throw new ApiError(400, "請輸入 5 位數字");
+    if (o.payment?.method !== "transfer") throw new ApiError(400, "這筆訂單不是銀行轉帳");
+    o.payment.report = { last5, at: now() };
+    console.info(`[mock] LINE 通知店家：${o.code} 回報匯款 ${last5}`);
+    return done(out(o));
+  };
 
-  if (route === "stock") return done(Object.fromEntries((await inventory(db)).map((s) => [s.id, s.available])));
+  if (route === "stock") {
+    const inv = await inventory(db);
+    const map: Record<string, number> = {};
+    for (const s of inv) {
+      map[s.id] = s.available;
+      if (s.id !== s.productId) map[s.productId] = (map[s.productId] ?? 0) + s.available;
+    }
+    return done(map);
+  }
+  if (route === "guest/order") {
+    const b = body as { code: string; phone: string; action: string; last5?: string };
+    const o = db.orders.find((x) => x.code === b.code?.toUpperCase());
+    if (!o || !digits(b.phone) || digits(o.recipient?.phone) !== digits(b.phone))
+      throw new ApiError(404, "找不到訂單，請確認訂單編號與手機號碼");
+    if (b.action === "cancel") return cancel(o);
+    if (b.action === "report") return report(o, b.last5);
+    return done(out(o));
+  }
   if (route === "me" && method === "GET") return done({ ...me, isAdmin: true });
   if (route === "me" && method === "PUT") {
     Object.assign(me, body);
@@ -143,8 +176,9 @@ export async function mockCall<T>(method: string, path: string, body?: unknown):
       kind: o.kind,
       items: o.items,
       shipping: o.shipping ?? null,
+      payment: o.payment ?? null,
       recipient: o.recipient ?? null,
-      total: subtotal + ship,
+      total: subtotal + ship + (o.payment?.fee ?? 0),
       status: "pending",
       note: o.note ?? null,
       tracking: null,
@@ -156,15 +190,14 @@ export async function mockCall<T>(method: string, path: string, body?: unknown):
       arrivedAt: null,
     };
     db.orders.push(order);
+    console.info(`[mock] LINE 通知店家：新訂單 ${order.code}`);
     return done(out(order));
   }
-  if (parts[0] === "orders" && parts[2] === "cancel") {
+  if (parts[0] === "orders" && parts[2]) {
     const o = db.orders.find((x) => x.id === Number(parts[1]) && x.lineUserId === ME);
     if (!o) throw new ApiError(404, "找不到訂單");
-    if (!["pending", "confirmed"].includes(o.status)) throw new ApiError(409, "這筆訂單目前無法自行取消");
-    o.status = "cancelled";
-    o.history.push(hist("cancelled", "buyer", "買家自行取消"));
-    return done(out(o));
+    if (parts[2] === "cancel") return cancel(o);
+    if (parts[2] === "report") return report(o, (body as { last5?: string }).last5);
   }
   if (route === "wishlist" && method === "GET")
     return done(db.wishlist.filter((w) => w.lineUserId === ME).map(({ lineUserId: _, ...w }) => w));

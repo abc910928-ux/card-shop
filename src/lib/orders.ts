@@ -50,6 +50,8 @@ export const PAY_DEADLINE_DAYS = 3;
 
 export type OrderItem = {
   productId?: string;
+  variantId?: string;
+  variant?: string; // 規格名稱
   name: string;
   price: number; // 代購詢價為 0（尚未報價）
   qty: number;
@@ -68,12 +70,20 @@ export type Shipping = {
 
 export type Recipient = { name?: string; phone?: string; store?: string; address?: string };
 
+export type Payment = {
+  method: "transfer" | "cod";
+  label: string;
+  fee: number;
+  report?: { last5: string; at: string }; // 買家回報的匯款帳號末五碼
+};
+
 export type Order = {
   id: number;
   code: string;
   kind: OrderKind;
   items: OrderItem[];
   shipping: Shipping | null;
+  payment: Payment | null;
   recipient: Recipient | null;
   total: number;
   status: OrderStatus;
@@ -107,32 +117,97 @@ export const HOLD_HOURS = 24;
 // ─── 訂單流程：依狀態決定下一步按鈕（參考蝦皮、Shopify 的後台） ───
 export const CANCELLED: OrderStatus[] = ["cancelled", "abandoned", "unallocated"];
 
-export function nextStep(o: Pick<Order, "kind" | "status">): { to: OrderStatus; label: string } | null {
+type FlowOrder = Pick<Order, "kind" | "status"> & { payment?: Pick<Payment, "method"> | null };
+const isCod = (o: FlowOrder) => o.payment?.method === "cod";
+
+/** 這筆訂單會經過的狀態（取貨付款沒有「已付款」這一步） */
+export function flowOf(o: FlowOrder): OrderStatus[] {
+  if (o.kind === "preorder") return ["pending", "confirmed", "arrived", "paid", "shipped", "completed"];
+  if (isCod(o)) return ["pending", "confirmed", "shipped", "completed"];
+  return ["pending", "confirmed", "paid", "shipped", "completed"];
+}
+
+/** 買家看到的進度文字 */
+export function stepLabel(o: FlowOrder, s: OrderStatus): string {
+  switch (s) {
+    case "pending":
+      return o.kind === "preorder" ? "已登記預購" : o.kind === "proxy" ? "已送出詢價" : "訂單成立";
+    case "confirmed":
+      return o.kind === "preorder" ? "預購確認" : o.kind === "proxy" ? "已報價" : isCod(o) ? "已確認・備貨中" : "已確認・待付款";
+    case "paid":
+      return "已付款・備貨中";
+    case "completed":
+      return isCod(o) ? "已取貨・完成" : "已完成";
+    default:
+      return statusLabel[s];
+  }
+}
+
+/** 買家看到的目前狀態 */
+export function buyerStatus(o: FlowOrder): string {
+  if (o.status === "pending") return o.kind === "proxy" ? "等待報價" : "待店家確認";
+  return stepLabel(o, o.status);
+}
+
+export type TimelineStep = { status: OrderStatus; label: string; at?: string; note?: string; state: "done" | "current" | "todo" };
+
+/** 訂單時間軸：照流程列出每一步，已經過的步驟附上時間；取消的訂單最後接一個取消步驟 */
+export function timelineOf(o: FlowOrder & Pick<Order, "history" | "createdAt">): TimelineStep[] {
+  const flow = flowOf(o);
+  const last = (s: OrderStatus) => [...o.history].reverse().find((h) => h.status === s);
+  const cancelled = CANCELLED.includes(o.status);
+  // 取消的訂單：以取消前最後一個有效狀態為進度
+  const reached = cancelled
+    ? ([...o.history].reverse().find((h) => !CANCELLED.includes(h.status))?.status ?? "pending")
+    : o.status;
+  const idx = Math.max(0, flow.indexOf(reached));
+  const steps: TimelineStep[] = flow.map((s, i) => ({
+    status: s,
+    label: stepLabel(o, s),
+    at: i <= idx ? (last(s)?.at ?? (s === "pending" ? o.createdAt : undefined)) : undefined,
+    note: i <= idx ? last(s)?.note : undefined,
+    state: i < idx || (i === idx && (cancelled || s === "completed")) ? "done" : i === idx ? "current" : "todo",
+  }));
+  if (cancelled) {
+    const h = last(o.status);
+    return [
+      ...steps.slice(0, idx + 1),
+      { status: o.status, label: statusLabel[o.status], at: h?.at, note: h?.note, state: "current" },
+    ];
+  }
+  return steps;
+}
+
+export function nextStep(o: FlowOrder): { to: OrderStatus; label: string } | null {
   switch (o.status) {
     case "pending":
       return { to: "confirmed", label: o.kind === "preorder" ? "確認預購" : o.kind === "proxy" ? "已報價" : "確認訂單" };
     case "confirmed":
-      return o.kind === "preorder" ? { to: "arrived", label: "商品已到貨" } : { to: "paid", label: "標記已付款" };
+      if (o.kind === "preorder") return { to: "arrived", label: "商品已到貨" };
+      return isCod(o) ? { to: "shipped", label: "出貨" } : { to: "paid", label: "標記已付款" };
     case "arrived":
       return { to: "paid", label: "標記已付款" };
     case "paid":
       return { to: "shipped", label: "出貨" };
     case "shipped":
-      return { to: "completed", label: "完成訂單" };
+      return { to: "completed", label: isCod(o) ? "已取貨・完成" : "完成訂單" };
     default:
       return null;
   }
 }
 
-/** 後台分頁（照出貨流程分） */
-export const STAGES: { id: string; label: string; statuses: OrderStatus[] }[] = [
-  { id: "todo", label: "待確認", statuses: ["pending"] },
-  { id: "unpaid", label: "待付款", statuses: ["confirmed", "arrived"] },
-  { id: "toship", label: "待出貨", statuses: ["paid"] },
-  { id: "shipped", label: "已出貨", statuses: ["shipped"] },
-  { id: "done", label: "已完成", statuses: ["completed"] },
-  { id: "cancelled", label: "取消・棄單", statuses: CANCELLED },
+/** 後台分頁（照出貨流程分）；取貨付款的訂單確認後直接進「待出貨」 */
+export const STAGES: { id: string; label: string; match: (o: FlowOrder) => boolean }[] = [
+  { id: "todo", label: "待確認", match: (o) => o.status === "pending" },
+  { id: "unpaid", label: "待付款", match: (o) => (o.status === "confirmed" && !isCod(o)) || o.status === "arrived" },
+  { id: "toship", label: "待出貨", match: (o) => o.status === "paid" || (o.status === "confirmed" && isCod(o)) },
+  { id: "shipped", label: "已出貨", match: (o) => o.status === "shipped" },
+  { id: "done", label: "已完成", match: (o) => o.status === "completed" },
+  { id: "cancelled", label: "取消・棄單", match: (o) => CANCELLED.includes(o.status) },
 ];
+
+/** 商品名稱（含規格） */
+export const itemLabel = (i: Pick<OrderItem, "name" | "variant">) => (i.variant ? `${i.name}（${i.variant}）` : i.name);
 
 /** 取消原因 → 對應狀態（棄單會計入預購條款第七條的次數） */
 export const CANCEL_REASONS: { status: OrderStatus; label: string; hint: string }[] = [
@@ -149,6 +224,7 @@ export type NewOrder = {
   kind: OrderKind;
   items: OrderItem[];
   shipping?: Shipping;
+  payment?: Pick<Payment, "method" | "label" | "fee">;
   recipient?: Recipient;
   note?: string;
 };

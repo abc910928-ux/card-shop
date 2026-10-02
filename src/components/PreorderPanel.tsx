@@ -1,16 +1,16 @@
 import { useState } from "preact/hooks";
 import { shop, shippingMethods } from "../config/shop";
-import { ntd, subline } from "../lib/format";
+import { ntd } from "../lib/format";
 import { feeLabel } from "../lib/shipping";
-import { copyAndOpenLine } from "../lib/line";
 import { login, useAuth } from "../lib/auth";
 import { useProfile } from "../lib/profile";
 import { api } from "../lib/api";
 import { PAY_DEADLINE_DAYS } from "../lib/orders";
 import type { ProductView } from "../lib/types";
 import { url } from "../lib/url";
-import { refreshStock, useLiveStock } from "../lib/stock";
-import { Stepper } from "./OrderPanel";
+import { skuOf } from "../lib/sku";
+import { refreshStock, useStockMap } from "../lib/stock";
+import Stepper from "./Stepper";
 
 // 預購商品的下單面板：必須登入、同意預購條款才能登記。不收訂金，到貨通知後才付款與選寄送方式。
 export default function PreorderPanel({ p }: { p: ProductView }) {
@@ -18,26 +18,21 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
   const pre = p.preorder!;
   const { enabled: authOn, ready, user } = useAuth();
   const profile = useProfile();
-  const stock = useLiveStock(p.id, p.stock); // 扣掉已登記後的剩餘名額
+  const live = useStockMap();
+  const variants = p.variants ?? [];
+  const [variantId, setVariantId] = useState<string | undefined>(() => (variants.find((v) => v.stock > 0) ?? variants[0])?.id);
+  const v = variants.find((x) => x.id === variantId);
+  const price = v?.price ?? p.price;
+  const stockOf = (id?: string, fallback = p.stock) => live?.[skuOf(p.id, id)] ?? fallback;
+  const stock = stockOf(variantId, v?.stock ?? p.stock); // 扣掉已登記後的剩餘名額
   const full = stock === 0;
   const maxQty = Math.max(1, Math.min(stock, pre.limit ?? stock));
   const [qty, setQty] = useState(1);
+  const q = Math.min(qty, maxQty);
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ code: string; text: string } | null>(null);
+  const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState("");
-
-  const buildText = (code: string) =>
-    [
-      `【${shop.name} 預購登記】`,
-      `訂單編號：${code}`,
-      `商品：${[subline(p), p.name].filter(Boolean).join(" ")}`,
-      `數量：${qty}`,
-      `預購價：${ntd(p.price)} × ${qty} = ${ntd(p.price * qty)}`,
-      `預計到貨：${pre.eta}`,
-      "",
-      "我已閱讀並同意預購服務條款。",
-    ].join("\n");
 
   async function submit() {
     setBusy(true);
@@ -45,7 +40,7 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
     try {
       const o = await api.createOrder({
         kind: "preorder",
-        items: [{ productId: p.id, name: p.name, price: p.price, qty }],
+        items: [{ productId: p.id, variantId, variant: v?.name, name: p.name, price, qty: q }],
         recipient: {
           name: profile?.realName ?? undefined,
           phone: profile?.phone ?? undefined,
@@ -53,10 +48,8 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
           address: profile?.address ?? undefined,
         },
       });
-      const text = buildText(o.code);
-      setDone({ code: o.code, text });
+      setDone(o.code);
       refreshStock();
-      await copyAndOpenLine(text);
     } catch (e) {
       setError(e instanceof Error ? e.message : "登記失敗，請稍後再試");
     }
@@ -67,7 +60,7 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
     <div class="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div class="flex flex-wrap items-center gap-2">
         <span class="rounded bg-accent px-2 py-0.5 text-xs font-bold text-accent-ink">預購</span>
-        <span class="font-display text-3xl font-bold">{ntd(p.price)}</span>
+        <span class="font-display text-3xl font-bold">{ntd(price)}</span>
       </div>
       <dl class="mt-3 space-y-1 text-sm">
         <Info label="預計到貨" value={pre.eta} />
@@ -76,24 +69,49 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
         <Info label="剩餘名額" value={full ? "預購額滿" : `${stock} 個`} />
       </dl>
 
+      {variants.length > 0 && (
+        <fieldset class="mt-4">
+          <legend class="mb-2 text-sm text-muted">規格</legend>
+          <div class="flex flex-wrap gap-2">
+            {variants.map((x) => {
+              const s = stockOf(x.id, x.stock);
+              const on = x.id === variantId;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setVariantId(x.id)}
+                  disabled={s === 0}
+                  aria-pressed={on}
+                  class={
+                    "rounded-lg border px-3 py-2 text-sm " +
+                    (s === 0
+                      ? "cursor-not-allowed border-dashed border-line text-muted line-through"
+                      : on
+                        ? "border-ink bg-ink text-white"
+                        : "border-line hover:border-ink")
+                  }
+                >
+                  {x.name}
+                  {p.priceMax !== p.price && <span class="ml-1.5 text-xs opacity-70">{ntd(x.price)}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
+
       <div class="mt-4 rounded-xl bg-bg p-3 text-xs leading-relaxed text-ink-soft">
-        <b>不收訂金</b>：到貨後我們會用 LINE 通知，請在 {PAY_DEADLINE_DAYS} 天內付款並選寄送方式（
-        {shippingMethods.map((m) => `${m.short} ${feeLabel(m)}`).join("、")}）。
+        <b>不收訂金</b>：到貨後會在「我的訂單」通知，請在 {PAY_DEADLINE_DAYS} 天內付款並選寄送方式（
+        {shippingMethods.filter((m) => !m.requiresMyship).map((m) => `${m.short} ${feeLabel(m)}`).join("、")}）。
       </div>
 
       {done ? (
         <div class="mt-5 space-y-2 rounded-xl border border-ok/40 bg-ok/5 p-4 text-sm">
-          <div class="font-bold text-ok">已登記預購 {done.code}</div>
-          <p class="text-ink-soft">
-            已開啟 LINE 官方帳號並填好預購內容，按送出即可。我們確認後會傳「預購確認」給你，可在
-            <a href={url("/account/?tab=orders")} class="mx-0.5 underline">
-              我的訂單
-            </a>
-            查看進度。
-          </p>
-          <button onClick={() => copyAndOpenLine(done.text)} class="text-xs underline underline-offset-2">
-            沒有開啟 LINE？再試一次
-          </button>
+          <div class="font-bold text-ok">已登記預購 {done}</div>
+          <p class="text-ink-soft">店家確認後，進度會更新在訂單頁。</p>
+          <a href={url(`/order/?code=${done}`)} class="inline-block font-medium underline underline-offset-2">
+            查看訂單進度 →
+          </a>
         </div>
       ) : full ? (
         <a
@@ -119,7 +137,7 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
           {maxQty > 1 && (
             <div class="flex items-center justify-between">
               <span class="text-sm text-muted">數量</span>
-              <Stepper value={qty} max={maxQty} onChange={setQty} />
+              <Stepper value={q} max={maxQty} onChange={setQty} />
             </div>
           )}
 
@@ -158,7 +176,7 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
               disabled={!agreed || busy}
               class="w-full rounded-xl bg-accent py-3.5 font-bold text-accent-ink transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {busy ? "登記中…" : `登記預購 ${qty} 個`}
+              {busy ? "登記中…" : `登記預購 ${q} 個・${ntd(price * q)}`}
             </button>
           )}
           {user && !agreed && !profile?.preorderBlocked && (

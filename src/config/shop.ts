@@ -29,7 +29,47 @@ export const shop = {
 
   // 出貨時間
   leadTime: "付款確認後 1–2 個工作天內出貨",
+
+  // 匯款帳號：訂單確認後顯示在買家的訂單頁。沒填時會請買家用 LINE 詢問
+  bank: {
+    name: "", // 例："中華郵政"
+    code: "", // 銀行代碼，例："700"
+    account: "", // 帳號
+    holder: "", // 戶名（可只寫姓氏＋○○）
+  },
+  payDays: 3, // 訂單確認後幾天內要匯款
 };
+
+// ─── 付款方式 ────────────────────────────────────────────────
+// 每件商品可在商品檔用 payments 限制（預設兩種都收），結帳時取所有商品的交集。
+export type PaymentId = "transfer" | "cod";
+export type PaymentMethod = {
+  id: PaymentId;
+  label: string;
+  note: string;
+  fee: number; // 額外手續費（加進訂單合計）
+  shipping: ShippingId[]; // 可搭配的寄送方式
+  maxAmount?: number; // 訂單合計超過就不能選
+};
+
+export const paymentMethods: PaymentMethod[] = [
+  {
+    id: "transfer",
+    label: "銀行轉帳",
+    note: `訂單確認後 ${shop.payDays} 天內轉帳，確認入帳後出貨`,
+    fee: 0,
+    shipping: ["711", "tcat"],
+  },
+  {
+    id: "cod",
+    label: "取貨付款",
+    note: "到 7-11 門市取貨時付現，不用先轉帳",
+    fee: 0, // 7-11 交貨便取貨付款不收代收手續費
+    // 黑貓「貨到付款」要是黑貓契約客戶，且依金額收 30–130 元手續費，所以先不開放
+    shipping: ["711"],
+    maxAmount: 20000, // 超商代收上限
+  },
+];
 
 // ─── 寄送方式 ────────────────────────────────────────────────
 // 三種保障方式：
@@ -58,7 +98,6 @@ export type ShippingMethod = {
   fee: number; // 基本運費（tiers 類型以級距為準）
   feeNote: string;
   payment: string;
-  orderVia: "myship" | "line"; // 下單管道
   requiresMyship?: boolean; // 商品有填 myshipUrl 才會出現
   maxValue?: number; // 商品金額超過就不能選；undefined = 不限
   maxValueReason?: string;
@@ -73,7 +112,6 @@ export const shippingMethods: ShippingMethod[] = [
     fee: 38,
     feeNote: "常溫優惠價（原價 60 元）",
     payment: "取貨付款或賣貨便線上付款",
-    orderVia: "myship",
     requiresMyship: true,
     maxValue: 20000,
     maxValueReason: "賣貨便取貨付款與遺失理賠上限都是 2 萬元",
@@ -85,8 +123,7 @@ export const shippingMethods: ShippingMethod[] = [
     short: "7-11 交貨便",
     fee: 60,
     feeNote: "依申報價值 60–100 元",
-    payment: "LINE 確認訂單後轉帳",
-    orderVia: "line",
+    payment: "銀行轉帳或取貨付款",
     // 一般交貨便本島運費（申報價值級距 → 運費）；遺失最多賠到申報價值
     coverage: {
       kind: "tiers",
@@ -105,8 +142,7 @@ export const shippingMethods: ShippingMethod[] = [
     short: "黑貓宅配",
     fee: 130,
     feeNote: "常溫 60 公分以下（卡牌包裹都在這級距）",
-    payment: "LINE 確認訂單後轉帳",
-    orderVia: "line",
+    payment: "銀行轉帳",
     maxValue: 50000,
     maxValueReason: "黑貓報值上限為 5 萬元",
     // ※ 報值費率請以寄件營業所報價為準，若不同改 rate 即可

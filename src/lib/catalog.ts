@@ -30,14 +30,34 @@ export async function toView(entry: ProductEntry): Promise<ProductView> {
     language: d.language,
     condition: d.condition,
     grade: d.grade,
-    price: d.price,
-    originalPrice: d.originalPrice,
-    stock: d.stock,
+    ...priceAndStock(d),
+    payments: d.payments,
     preorder: d.preorder,
     myshipUrl: d.myshipUrl || undefined,
     addedAt: d.addedAt.toISOString().slice(0, 10),
     featured: d.featured,
     thumb,
+  };
+}
+
+// 有規格時：列表顯示最低價（priceMax 用來顯示「起」），數量為各規格合計
+function priceAndStock(d: ProductEntry["data"]) {
+  if (!d.variants?.length) return { price: d.price, priceMax: d.price, originalPrice: d.originalPrice, stock: d.stock };
+  const variants = d.variants.map((v) => ({
+    id: v.id,
+    name: v.name,
+    price: v.price ?? d.price,
+    originalPrice: v.originalPrice ?? (v.price === undefined ? d.originalPrice : undefined),
+    stock: v.stock,
+  }));
+  const prices = variants.map((v) => v.price);
+  const cheapest = variants.find((v) => v.price === Math.min(...prices))!;
+  return {
+    price: cheapest.price,
+    priceMax: Math.max(...prices),
+    originalPrice: cheapest.originalPrice,
+    stock: variants.reduce((s, v) => s + v.stock, 0),
+    variants,
   };
 }
 
