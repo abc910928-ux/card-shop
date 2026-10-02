@@ -58,10 +58,12 @@ featured: true          # 首頁精選
 
 ## 標誌與圖示
 
-- `public/logo.svg`：頁首標誌和瀏覽器分頁圖示。目前是依 LINE 頭像截圖重繪的向量版
-- `public/favicon-32.png`、`public/apple-touch-icon.png`：從 logo.svg 產生的小圖示
+正式標誌是向量檔 `public/logo.svg`，其他圖檔都從它匯出：
 
-有原始標誌檔時，覆蓋 `public/logo.svg` 就能換掉；如果原檔是 PNG，請把頁首和 `<link rel="icon">` 改指向 PNG 檔，再重新產生這兩個小圖示。
+- `brand/tcg-logo.svg`：向量原檔副本（印刷、放大都不會糊）
+- `brand/tcg-logo-1024.png`：1024px，圓形外透明，一般用途
+- `brand/tcg-logo-line-640.png`：640px 白底，LINE 官方帳號大頭貼用
+- `public/favicon-32.png`、`public/apple-touch-icon.png`：瀏覽器分頁與手機主畫面圖示
 
 ## 部署到 GitHub Pages
 
