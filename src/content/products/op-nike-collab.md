@@ -11,10 +11,11 @@ variants:
   - { id: b, name: B組・4 張（散裝）, price: 550, stock: 10 }
 addedAt: 2026-10-03
 featured: true
+images: ["../../assets/products/op-nike-collab.jpg"]
 ---
 One Piece × NIKE 聯名應募款。
 
 - **A 組**：尼卡 ×4、咚卡每張 ×10，共 34 張，附原袋，NT$2,000／組
 - **B 組**：尼卡、咚卡各 1 張，共 4 張，散裝，NT$550／組
 
-如果數量額滿會提早結單。
+如果數量額滿會提早結單。圖片為官方示意圖。
