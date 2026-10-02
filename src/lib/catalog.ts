@@ -30,6 +30,7 @@ export async function toView(entry: ProductEntry): Promise<ProductView> {
     language: d.language,
     grade: d.grade,
     ...priceAndStock(d),
+    unit: d.unit,
     payments: d.payments,
     preorder: d.preorder,
     myshipUrl: d.myshipUrl || undefined,

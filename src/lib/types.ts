@@ -20,6 +20,7 @@ export type ProductView = {
   price: number; // 有規格時為最低價
   priceMax: number; // 有規格且價格不同時 > price
   originalPrice?: number;
+  unit?: string; // 計價單位
   stock: number; // 有規格時為各規格合計
   variants?: Variant[];
   payments: PaymentId[];

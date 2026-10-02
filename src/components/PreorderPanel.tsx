@@ -37,6 +37,7 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
       <div class="flex flex-wrap items-center gap-2">
         <span class="rounded bg-accent px-2 py-0.5 text-xs font-bold text-accent-ink">預購</span>
         <span class="font-display text-3xl font-bold">{ntd(price)}</span>
+        {p.unit && <span class="text-sm text-muted">／{p.unit}</span>}
       </div>
       <dl class="mt-3 space-y-1 text-sm">
         <Info label="預計到貨" value={pre.eta ?? "到貨後通知"} />

@@ -18,6 +18,7 @@ const products = defineCollection({
       grade: z.object({ company: z.string(), score: z.string() }).optional(),
       price: z.number().int().positive(),
       originalPrice: z.number().int().positive().optional(),
+      unit: z.string().optional(), // 計價單位，例：盒、包、組（顯示成「NT$1,850／盒」）
       stock: z.number().int().min(0).default(0), // 現貨：進貨總數；預購：可預購總數（有規格時改填在各規格）
       // 規格（選填）：同一商品不同版本，各自的價格與數量。沒填價格就用上面的 price
       // 例：- { id: jp, name: 日文版, stock: 3 }

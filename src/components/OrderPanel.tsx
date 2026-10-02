@@ -58,6 +58,7 @@ export default function OrderPanel({ p }: { p: ProductView }) {
       {/* 價格 */}
       <div class="flex flex-wrap items-baseline gap-2">
         <span class={`font-display text-3xl font-bold ${off > 0 ? "text-sale" : ""}`}>{ntd(price)}</span>
+        {p.unit && <span class="text-sm text-muted">／{p.unit}</span>}
         {off > 0 && (
           <>
             <span class="text-sm text-muted line-through">{ntd(original!)}</span>

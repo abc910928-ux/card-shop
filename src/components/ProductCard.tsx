@@ -86,6 +86,7 @@ export function ProductCard({ p, wish = false }: { p: ProductView; wish?: boolea
           <div class="flex flex-wrap items-baseline gap-x-1">
             <span class={`font-display text-base font-bold ${off > 0 ? "text-sale" : ""}`}>
               {ntd(p.price)}
+              {p.unit && <span class="text-xs font-normal text-muted">／{p.unit}</span>}
               {p.priceMax > p.price && <span class="ml-0.5 text-xs font-normal text-muted">起</span>}
             </span>
             {off > 0 && (
