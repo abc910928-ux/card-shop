@@ -5,7 +5,7 @@ game: 航海王
 set: AC-02
 price: 3200
 unit: 盒
-stock: 10              # 可預購名額
+stock: 3               # 可預購名額
 payments: [transfer]   # 預購只收轉帳：到貨後通知付款
 preorder: { eta: 發售後約 2 週 }
 images: ["../../assets/products/op-ac02.jpg"]

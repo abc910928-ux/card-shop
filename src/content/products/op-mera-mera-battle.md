@@ -4,7 +4,7 @@ category: 周邊
 game: 航海王
 price: 2200
 unit: 組
-stock: 10              # 可預購名額
+stock: 3               # 可預購名額
 payments: [transfer]   # 預購只收轉帳：到貨後通知付款
 preorder: { eta: 10/18 左右 }
 addedAt: 2026-10-03
