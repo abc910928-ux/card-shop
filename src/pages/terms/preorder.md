@@ -86,4 +86,4 @@ draft: true
 
 - 名稱：TCG代購
 - 經營者：<mark>［填入姓名］</mark>
-- 聯絡方式：LINE（ID：Joe910928）
+- 聯絡方式：LINE 官方帳號（ID：@195azlpr）

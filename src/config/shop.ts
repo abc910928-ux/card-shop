@@ -15,8 +15,9 @@ export const shop = {
   ],
 
   // 聯絡方式（宅配訂單透過 LINE 確認）
-  lineId: "Joe910928",
-  lineUrl: "https://line.me/ti/p/P2YiI6WBGh",
+  // LINE 官方帳號（改 ID 後執行 node scripts/make-line-qr.mjs <加好友網址> 重新產生 QR Code）
+  lineId: "@195azlpr",
+  lineUrl: "https://line.me/R/ti/p/@195azlpr",
   lineQr: "line-qr.png", // 放在 public/
 
   // 你的 7-11 賣貨便賣場首頁（選填，填了頁首會出現連結）

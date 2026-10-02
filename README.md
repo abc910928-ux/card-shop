@@ -65,6 +65,14 @@ featured: true          # 首頁精選
 - `brand/tcg-logo-line-640.png`：640px 白底，LINE 官方帳號大頭貼用
 - `public/favicon-32.png`、`public/apple-touch-icon.png`：瀏覽器分頁與手機主畫面圖示
 
+## LINE 官方帳號
+
+網站上的「LINE 詢問」、下單、詢價按鈕都連到 `src/config/shop.ts` 裡的 `lineUrl`（目前是官方帳號 @195azlpr）。換帳號時改 `lineId`、`lineUrl`，再執行這行重新產生頁尾的 QR Code：
+
+```bash
+node scripts/make-line-qr.mjs https://line.me/R/ti/p/@你的ID
+```
+
 ## 部署到 GitHub Pages
 
 1. 在 GitHub 建立名為 `card-shop` 的 repo，把這個資料夾推上去
