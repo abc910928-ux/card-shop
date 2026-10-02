@@ -17,7 +17,18 @@ const ALLOWED_ORIGINS = new Set(
   [SITE_URL && new URL(SITE_URL).origin, "http://localhost:3020"].filter(Boolean) as string[],
 );
 
-const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+// 新版專案用 SUPABASE_SECRET_KEYS（JSON：{"default": "sb_secret_..."}），舊專案用 SUPABASE_SERVICE_ROLE_KEY
+function serverKey(): string {
+  try {
+    const keys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}");
+    const k = keys.default ?? Object.values(keys)[0];
+    if (typeof k === "string" && k) return k;
+  } catch {
+    // 格式不對就改用舊版金鑰
+  }
+  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+}
+const db = createClient(Deno.env.get("SUPABASE_URL")!, serverKey(), {
   auth: { persistSession: false },
 });
 

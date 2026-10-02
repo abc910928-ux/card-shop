@@ -48,6 +48,9 @@ alter table public.profiles enable row level security;
 alter table public.orders enable row level security;
 alter table public.wishlist enable row level security;
 revoke all on public.profiles, public.orders, public.wishlist from anon, authenticated;
+-- 專案關閉了「自動開放新資料表」，所以明確授權給 Edge Function 使用的 service_role
+grant select, insert, update, delete on public.profiles, public.orders, public.wishlist to service_role;
+grant usage, select on all sequences in schema public to service_role;
 
 -- updated_at 自動更新
 create function public.touch_updated_at() returns trigger
@@ -72,3 +75,4 @@ from public.profiles p
 left join public.orders o on o.line_user_id = p.line_user_id
 group by p.line_user_id;
 revoke all on public.member_stats from anon, authenticated;
+grant select on public.member_stats to service_role;
