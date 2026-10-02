@@ -14,8 +14,9 @@ import { discountPercent, ntd, subline } from "../lib/format";
 import { copyAndOpenLine } from "../lib/line";
 import { login, useAuth } from "../lib/auth";
 import { useProfile } from "../lib/profile";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import type { Recipient } from "../lib/orders";
+import { refreshStock, useLiveStock } from "../lib/stock";
 import type { ProductView } from "../lib/types";
 
 // 商品頁右側的下單面板（現貨）：選寄送方式與保價，即時算出合計並導向下單管道。
@@ -23,7 +24,8 @@ import type { ProductView } from "../lib/types";
 export default function OrderPanel({ p }: { p: ProductView }) {
   const { enabled: authOn, user } = useAuth();
   const profile = useProfile();
-  const soldOut = p.stock === 0;
+  const stock = useLiveStock(p.id, p.stock); // 扣掉訂單後的即時剩餘
+  const soldOut = stock === 0;
   const methods = methodsFor(p);
   const [qty, setQty] = useState(1);
   const goods = p.price * qty;
@@ -32,7 +34,7 @@ export default function OrderPanel({ p }: { p: ProductView }) {
   const [declared, setDeclared] = useState<number | undefined>(undefined); // undefined = 依商品金額自動選級距
   const [copied, setCopied] = useState<"" | "ok" | "fail">("");
   const [sending, setSending] = useState(false);
-  const [saved, setSaved] = useState<{ code?: string; error?: string } | null>(null);
+  const [saved, setSaved] = useState<{ code?: string; error?: string; blocked?: boolean } | null>(null);
 
   const anyAvailable = methods.some((m) => availability(m, goods).ok);
   // 數量變動後若原本的方式超過上限，自動換成可用的
@@ -83,9 +85,10 @@ export default function OrderPanel({ p }: { p: ProductView }) {
 
   async function orderByLine() {
     setSending(true);
-    let code: string | undefined;
-    if (user) {
-      // 已登入：先存進資料庫拿訂單編號；儲存失敗也照樣用 LINE 下單
+    let code: string | undefined = saved?.code; // 已經建立過就不重複建立，只重開 LINE
+    if (authOn && !code) {
+      // 先存進資料庫拿訂單編號並保留庫存（訪客也會記錄）；庫存不足就不送出
+      // 其他錯誤（例如網路問題）照樣用 LINE 下單
       try {
         const o = await api.createOrder({
           kind: "stock",
@@ -102,7 +105,15 @@ export default function OrderPanel({ p }: { p: ProductView }) {
         });
         code = o.code;
         setSaved({ code });
+        refreshStock();
       } catch (e) {
+        if (e instanceof ApiError && e.status === 409) {
+          // 庫存不足：不送出，更新畫面上的剩餘數量
+          setSaved({ error: e.message, blocked: true });
+          refreshStock();
+          setSending(false);
+          return;
+        }
         setSaved({ error: e instanceof Error ? e.message : "訂單紀錄儲存失敗" });
       }
     }
@@ -125,16 +136,16 @@ export default function OrderPanel({ p }: { p: ProductView }) {
         )}
       </div>
       <div class={`mt-1 text-sm ${soldOut ? "text-sale" : "text-ok"}`}>
-        {soldOut ? "已售完" : `現貨 ${p.stock} 件`}
+        {soldOut ? "已售完" : `現貨 ${stock} 件`}
       </div>
 
       {!soldOut && (
         <>
           {/* 數量 */}
-          {p.stock > 1 && (
+          {stock > 1 && (
             <div class="mt-5 flex items-center justify-between">
               <span class="text-sm text-muted">數量</span>
-              <Stepper value={qty} max={p.stock} onChange={setQty} />
+              <Stepper value={Math.min(qty, stock)} max={stock} onChange={setQty} />
             </div>
           )}
 
@@ -320,7 +331,11 @@ export default function OrderPanel({ p }: { p: ProductView }) {
                   ? "無法自動複製，請手動複製下方訂單內容"
                   : `會開啟 LINE 官方帳號（${shop.lineId}）並自動填好訂單，確認後轉帳出貨`}
             </p>
-            {saved?.error && <p class="text-center text-xs text-sale">訂單紀錄未儲存（{saved.error}），仍可用 LINE 下單</p>}
+            {saved?.error && (
+              <p class="text-center text-xs text-sale">
+                {saved.blocked ? `${saved.error}，請調整數量或 LINE 詢問` : `訂單紀錄未儲存（${saved.error}），仍可用 LINE 下單`}
+              </p>
+            )}
             {authOn && !user && (
               <p class="text-center text-xs text-muted">
                 <button onClick={() => login()} class="underline underline-offset-2 hover:text-ink">

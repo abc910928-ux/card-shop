@@ -4,7 +4,7 @@
 //   LINE_LOGIN_CHANNEL_ID  LINE Login 頻道 ID（驗證 token 是發給我們的頻道）
 //   ADMIN_LINE_USER_IDS    管理員的 LINE userId，多個用逗號分隔
 //   SITE_URL               網站網址，例：https://abc910928-ux.github.io/card-shop
-// SUPABASE_URL、SUPABASE_SERVICE_ROLE_KEY 由 Supabase 自動提供。
+// SUPABASE_URL、SUPABASE_SECRET_KEYS（或舊版 SUPABASE_SERVICE_ROLE_KEY）由 Supabase 自動提供。
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const CHANNEL_ID = Deno.env.get("LINE_LOGIN_CHANNEL_ID") ?? "";
@@ -33,7 +33,10 @@ const db = createClient(Deno.env.get("SUPABASE_URL")!, serverKey(), {
 });
 
 const STATUSES = ["pending", "confirmed", "arrived", "paid", "shipped", "completed", "cancelled", "abandoned", "unallocated"];
-const INACTIVE = ["cancelled", "abandoned", "unallocated"]; // 不計入限購數量的狀態
+const INACTIVE = ["cancelled", "abandoned", "unallocated"]; // 取消類：不占庫存、不計限購
+const ACTIVE = STATUSES.filter((s) => !INACTIVE.includes(s));
+// 現貨訂單「待確認」超過這個時數還沒被店家確認，就不再保留庫存（避免有人下單不理、占住庫存）
+const HOLD_HOURS = 24;
 
 // ─── 共用 ─────────────────────────────────────────────
 class HttpError extends Error {
@@ -100,9 +103,64 @@ async function products(): Promise<Product[]> {
   return list;
 }
 
-// ─── 資料轉換 ──────────────────────────────────────────
 // deno-lint-ignore no-explicit-any
 type Row = Record<string, any>;
+
+// ─── 庫存 ──────────────────────────────────────────────
+// 剩餘 = 商品檔的 stock（進貨總數）＋ 手動調整 − 有效訂單占用的數量
+function holdsStock(o: Row): boolean {
+  if (o.kind === "proxy" || !ACTIVE.includes(o.status)) return false;
+  if (o.kind === "stock" && o.status === "pending") {
+    return Date.now() - new Date(o.created_at).getTime() < HOLD_HOURS * 3600_000;
+  }
+  return true;
+}
+
+type Stock = { id: string; name: string; preorder: boolean; base: number; adjust: number; sold: number; available: number };
+async function inventory(excludeOrderId?: number): Promise<Map<string, Stock>> {
+  const [list, orders, adjusts] = await Promise.all([
+    products(),
+    db.from("orders").select("id, kind, status, items, created_at").in("kind", ["stock", "preorder"]).in("status", ACTIVE),
+    db.from("inventory_adjustments").select("product_id, delta"),
+  ]);
+  const map = new Map<string, Stock>();
+  for (const p of list) map.set(p.id, { id: p.id, name: p.name, preorder: !!p.preorder, base: p.stock, adjust: 0, sold: 0, available: 0 });
+  for (const a of check(adjusts)) {
+    const s = map.get(a.product_id);
+    if (s) s.adjust += a.delta;
+  }
+  for (const o of check(orders)) {
+    if (o.id === excludeOrderId || !holdsStock(o)) continue;
+    for (const i of o.items) {
+      const s = i.productId && map.get(i.productId);
+      if (s) s.sold += i.qty;
+    }
+  }
+  for (const s of map.values()) s.available = Math.max(0, s.base + s.adjust - s.sold);
+  return map;
+}
+
+/** 訂單要開始占用庫存時，確認數量還夠 */
+async function ensureAvailable(items: Row[], excludeOrderId?: number) {
+  const inv = await inventory(excludeOrderId);
+  for (const i of items) {
+    if (!i.productId) continue;
+    const s = inv.get(i.productId);
+    if (!s) throw new HttpError(400, `「${i.name}」已下架`);
+    if (i.qty > s.available) throw new HttpError(409, `「${i.name}」庫存不足（剩 ${s.available} 個）`);
+  }
+}
+
+let stockCache: { at: number; data: Record<string, number> } | null = null;
+async function publicStock(): Promise<Record<string, number>> {
+  if (stockCache && Date.now() - stockCache.at < 10_000) return stockCache.data;
+  const data: Record<string, number> = {};
+  for (const s of (await inventory()).values()) data[s.id] = s.available;
+  stockCache = { at: Date.now(), data };
+  return data;
+}
+
+// ─── 資料轉換 ──────────────────────────────────────────
 const profileOut = (r: Row, isAdmin: boolean) => ({
   lineUserId: r.line_user_id,
   displayName: r.display_name,
@@ -124,6 +182,10 @@ const orderOut = (r: Row) => ({
   total: r.total,
   status: r.status,
   note: r.note,
+  tracking: r.tracking,
+  guest: r.guest,
+  history: r.status_history ?? [],
+  holdsStock: holdsStock(r),
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   arrivedAt: r.arrived_at,
@@ -160,6 +222,13 @@ function newCode(): string {
   return `TC-${d.slice(2, 4)}${d.slice(5, 7)}${d.slice(8, 10)}-${rand}`;
 }
 
+const historyEntry = (status: string, by: "buyer" | "admin" | "system", note?: string | null) => ({
+  status,
+  at: new Date().toISOString(),
+  by,
+  ...(note ? { note } : {}),
+});
+
 // ─── 路由 ──────────────────────────────────────────────
 async function handle(req: Request): Promise<unknown> {
   const url = new URL(req.url);
@@ -168,18 +237,23 @@ async function handle(req: Request): Promise<unknown> {
   if (parts[0] === "functions") parts.splice(0, 3);
   const route = parts.join("/");
   const m = req.method;
+  const body = ["POST", "PUT", "PATCH"].includes(m) ? await req.json().catch(() => ({})) : {};
 
+  // ── 不用登入的路由 ──
   if (route === "health") {
     // 順便碰一下資料庫，避免免費專案因閒置被暫停
-    await db.from("profiles").select("line_user_id", { head: true, count: "exact" });
+    check(await db.from("profiles").select("line_user_id", { head: true, count: "exact" }));
     return { ok: true };
   }
+  if (route === "stock" && m === "GET") return await publicStock();
 
   const token = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
+  // 訪客也能下現貨訂單（只記錄訂單與占用庫存，聯絡一律走 LINE）
+  if (!token && route === "orders" && m === "POST") return await createOrder(null, null, body);
   if (!token) throw new HttpError(401, "請先登入");
+
   const line = await verifyLine(token);
   const isAdmin = ADMINS.includes(line.userId);
-  const body = ["POST", "PUT", "PATCH"].includes(m) ? await req.json().catch(() => ({})) : {};
 
   // 每次請求都同步 LINE 名稱與頭貼（新會員自動建立）
   const me = check(
@@ -220,6 +294,22 @@ async function handle(req: Request): Promise<unknown> {
     return rows.map(orderOut);
   }
   if (route === "orders" && m === "POST") return await createOrder(line.userId, me, body);
+  if (parts[0] === "orders" && parts[2] === "cancel" && m === "POST") {
+    // 買家自行取消：還沒付款（預購還沒到貨）前都可以
+    const o = check(await db.from("orders").select().eq("id", Number(parts[1])).eq("line_user_id", line.userId).maybeSingle());
+    if (!o) throw new HttpError(404, "找不到訂單");
+    if (!["pending", "confirmed"].includes(o.status)) throw new HttpError(409, "這筆訂單目前無法自行取消，請 LINE 聯絡我們");
+    const row = check(
+      await db
+        .from("orders")
+        .update({ status: "cancelled", status_history: [...(o.status_history ?? []), historyEntry("cancelled", "buyer", "買家自行取消")] })
+        .eq("id", o.id)
+        .select()
+        .single(),
+    );
+    stockCache = null;
+    return orderOut(row);
+  }
 
   // ── 收藏 ──
   if (route === "wishlist" && m === "GET") {
@@ -227,12 +317,13 @@ async function handle(req: Request): Promise<unknown> {
     return rows.map(wishOut);
   }
   if (parts[0] === "wishlist" && parts[1] && m === "PUT") {
-    const p = (await products()).find((x) => x.id === parts[1]);
-    if (!p) throw new HttpError(404, "找不到這件商品");
+    const s = (await inventory()).get(parts[1]);
+    if (!s) throw new HttpError(404, "找不到這件商品");
+    const p = (await products()).find((x) => x.id === s.id)!;
     const row = check(
       await db
         .from("wishlist")
-        .upsert({ line_user_id: line.userId, product_id: p.id, price_at_add: p.price, stock_at_add: p.stock })
+        .upsert({ line_user_id: line.userId, product_id: p.id, price_at_add: p.price, stock_at_add: s.available })
         .select()
         .single(),
     );
@@ -248,23 +339,31 @@ async function handle(req: Request): Promise<unknown> {
     if (!isAdmin) throw new HttpError(403, "沒有管理權限");
 
     if (route === "admin/orders" && m === "GET") {
-      let q = db.from("orders").select("*, profiles(display_name, real_name, phone)").order("created_at", { ascending: false }).limit(500);
-      const status = url.searchParams.get("status");
-      if (status && STATUSES.includes(status)) q = q.eq("status", status);
-      return check(await q).map(orderOut);
+      const rows = check(
+        await db.from("orders").select("*, profiles(display_name, real_name, phone)").order("created_at", { ascending: false }).limit(500),
+      );
+      return rows.map(orderOut);
     }
     if (parts[1] === "orders" && parts[2] && m === "PATCH") {
       const id = Number(parts[2]);
-      const current = check(await db.from("orders").select("status").eq("id", id).maybeSingle());
-      if (!current) throw new HttpError(404, "找不到訂單");
+      const o = check(await db.from("orders").select().eq("id", id).maybeSingle());
+      if (!o) throw new HttpError(404, "找不到訂單");
       const patch: Row = {};
-      if (body.status !== undefined) {
+      const reason = str(body.reason, 200);
+      if (body.status !== undefined && body.status !== o.status) {
         if (!STATUSES.includes(body.status)) throw new HttpError(400, "狀態不正確");
+        const next = { ...o, status: body.status, created_at: body.status === "pending" ? o.created_at : new Date().toISOString() };
+        // 從「不占庫存」變成「占庫存」（例如復原已取消的訂單、確認逾時的訂單）時，要確認庫存還夠
+        if (!holdsStock(o) && holdsStock(next)) await ensureAvailable(o.items, id);
         patch.status = body.status;
-        if (body.status === "arrived" && current.status !== "arrived") patch.arrived_at = new Date().toISOString();
+        patch.status_history = [...(o.status_history ?? []), historyEntry(body.status, "admin", reason)];
+        if (body.status === "arrived") patch.arrived_at = new Date().toISOString();
       }
       if (body.note !== undefined) patch.note = str(body.note, 300);
-      const row = check(await db.from("orders").update(patch).eq("id", id).select().single());
+      if (body.tracking !== undefined) patch.tracking = str(body.tracking, 60);
+      if (Object.keys(patch).length === 0) return orderOut(o);
+      const row = check(await db.from("orders").update(patch).eq("id", id).select("*, profiles(display_name, real_name, phone)").single());
+      stockCache = null;
       return orderOut(row);
     }
     if (route === "admin/members" && m === "GET") {
@@ -278,16 +377,29 @@ async function handle(req: Request): Promise<unknown> {
       if (!row) throw new HttpError(404, "找不到會員");
       return memberOut(row);
     }
+    if (route === "admin/inventory" && m === "GET") {
+      return [...(await inventory()).values()];
+    }
+    if (route === "admin/inventory" && m === "POST") {
+      const id = str(body.productId, 100);
+      if (!id || !(await products()).some((p) => p.id === id)) throw new HttpError(400, "找不到這件商品");
+      const delta = int(body.delta, -999, 999);
+      if (delta === 0) throw new HttpError(400, "數量不能是 0");
+      check(await db.from("inventory_adjustments").insert({ product_id: id, delta, note: str(body.note, 100) }));
+      stockCache = null;
+      return (await inventory()).get(id);
+    }
   }
 
   throw new HttpError(404, "找不到這個功能");
 }
 
-async function createOrder(userId: string, me: Row, body: Row) {
+async function createOrder(userId: string | null, me: Row | null, body: Row) {
   const kind = body.kind;
   if (!["stock", "preorder", "proxy"].includes(kind)) throw new HttpError(400, "訂單類型錯誤");
+  if (!userId && kind !== "stock") throw new HttpError(401, "預購與代購需要先登入");
   if (!Array.isArray(body.items) || body.items.length < 1 || body.items.length > 20) throw new HttpError(400, "商品內容錯誤");
-  if (kind === "preorder" && me.preorder_blocked) throw new HttpError(403, "你的帳號目前無法預購，請 LINE 聯絡我們");
+  if (kind === "preorder" && me?.preorder_blocked) throw new HttpError(403, "你的帳號目前無法預購，請 LINE 聯絡我們");
 
   let items: Row[];
   if (kind === "proxy") {
@@ -304,10 +416,9 @@ async function createOrder(userId: string, me: Row, body: Row) {
     for (const i of body.items) {
       const p = list.find((x) => x.id === i.productId);
       if (!p) throw new HttpError(400, "商品已下架或不存在");
-      const qty = int(i.qty, 1, 99);
+      const qty = int(i.qty, 1, userId ? 99 : 10);
       if (kind === "preorder" && !p.preorder) throw new HttpError(400, `「${p.name}」不是預購商品`);
       if (kind === "stock" && p.preorder) throw new HttpError(400, `「${p.name}」是預購商品，請用預購登記`);
-      if (qty > p.stock) throw new HttpError(409, `「${p.name}」數量不足`);
       if (kind === "preorder" && p.preorder?.limit) {
         const mine = check(
           await db.from("orders").select("items").eq("line_user_id", userId).eq("kind", "preorder").not("status", "in", `(${INACTIVE.join(",")})`),
@@ -317,6 +428,7 @@ async function createOrder(userId: string, me: Row, body: Row) {
       }
       items.push({ productId: p.id, name: p.name, price: p.price, qty });
     }
+    await ensureAvailable(items); // 自動扣庫存：數量不夠就不成立
   }
 
   let shipping: Row | null = null;
@@ -340,10 +452,24 @@ async function createOrder(userId: string, me: Row, body: Row) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await db
       .from("orders")
-      .insert({ code: newCode(), line_user_id: userId, kind, items, shipping, recipient, total, note: str(body.note, 300) })
+      .insert({
+        code: newCode(),
+        line_user_id: userId,
+        guest: !userId,
+        kind,
+        items,
+        shipping,
+        recipient,
+        total,
+        note: str(body.note, 300),
+        status_history: [historyEntry("pending", "buyer", userId ? null : "訪客下單")],
+      })
       .select()
       .single();
-    if (!res.error) return orderOut(res.data);
+    if (!res.error) {
+      stockCache = null;
+      return orderOut(res.data);
+    }
     if (res.error.code !== "23505") throw new HttpError(500, `資料庫錯誤：${res.error.message}`); // 23505 = 訂單編號重複，重試
   }
   throw new HttpError(500, "建立訂單失敗，請再試一次");

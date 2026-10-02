@@ -5,7 +5,9 @@ import { setProfile, useProfile, useWishlist } from "../lib/profile";
 import { api } from "../lib/api";
 import { ntd } from "../lib/format";
 import { url } from "../lib/url";
+import { refreshStock } from "../lib/stock";
 import {
+  BUYER_CANCELLABLE,
   isOverdue,
   kindLabel,
   payDeadline,
@@ -185,6 +187,17 @@ function OrderList() {
       .catch((e) => setError(e instanceof Error ? e.message : "讀取失敗"));
   }, []);
 
+  async function cancel(o: Order) {
+    if (!confirm(`確定要取消訂單 ${o.code}？取消後無法自行恢復。`)) return;
+    try {
+      const saved = await api.cancelOrder(o.id);
+      setOrders((list) => list?.map((x) => (x.id === o.id ? saved : x)) ?? null);
+      refreshStock();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "取消失敗");
+    }
+  }
+
   if (error) return <p class="text-sm text-sale">{error}</p>;
   if (!orders) return <div class="h-40 animate-pulse rounded-2xl bg-surface" />;
   if (orders.length === 0)
@@ -222,7 +235,15 @@ function OrderList() {
               {isOverdue(o) && "（已超過付款期限，請盡快聯絡我們）"}
             </p>
           )}
-          {o.note && <p class="mt-2 text-xs text-muted">備註：{o.note}</p>}
+          {o.tracking && <p class="mt-2 text-sm">物流單號：<span class="font-medium">{o.tracking}</span></p>}
+          {o.note && <p class="mt-2 text-xs text-muted">店家備註：{o.note}</p>}
+          {BUYER_CANCELLABLE.includes(o.status) && (
+            <div class="mt-3 border-t border-line pt-2 text-right">
+              <button onClick={() => cancel(o)} class="text-xs text-muted underline underline-offset-2 hover:text-sale">
+                取消訂單
+              </button>
+            </div>
+          )}
         </li>
       ))}
     </ul>

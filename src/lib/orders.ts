@@ -78,12 +78,72 @@ export type Order = {
   total: number;
   status: OrderStatus;
   note: string | null;
+  tracking: string | null;
+  guest: boolean;
+  history: HistoryEntry[];
+  holdsStock: boolean; // 目前是否占用庫存（待確認超過 24 小時未確認的現貨訂單會釋出）
   createdAt: string;
   updatedAt: string;
   arrivedAt: string | null;
   // 管理頁才有
   member?: { displayName: string; realName: string | null; phone: string | null };
 };
+
+export type HistoryEntry = { status: OrderStatus; at: string; by: "buyer" | "admin" | "system"; note?: string };
+
+export type StockRow = {
+  id: string;
+  name: string;
+  preorder: boolean;
+  base: number; // 商品檔裡的 stock（進貨總數）
+  adjust: number; // 手動調整合計
+  sold: number; // 有效訂單占用
+  available: number;
+};
+
+/** 現貨「待確認」保留庫存的時數（與後端一致） */
+export const HOLD_HOURS = 24;
+
+// ─── 訂單流程：依狀態決定下一步按鈕（參考蝦皮、Shopify 的後台） ───
+export const CANCELLED: OrderStatus[] = ["cancelled", "abandoned", "unallocated"];
+
+export function nextStep(o: Pick<Order, "kind" | "status">): { to: OrderStatus; label: string } | null {
+  switch (o.status) {
+    case "pending":
+      return { to: "confirmed", label: o.kind === "preorder" ? "確認預購" : o.kind === "proxy" ? "已報價" : "確認訂單" };
+    case "confirmed":
+      return o.kind === "preorder" ? { to: "arrived", label: "商品已到貨" } : { to: "paid", label: "標記已付款" };
+    case "arrived":
+      return { to: "paid", label: "標記已付款" };
+    case "paid":
+      return { to: "shipped", label: "出貨" };
+    case "shipped":
+      return { to: "completed", label: "完成訂單" };
+    default:
+      return null;
+  }
+}
+
+/** 後台分頁（照出貨流程分） */
+export const STAGES: { id: string; label: string; statuses: OrderStatus[] }[] = [
+  { id: "todo", label: "待確認", statuses: ["pending"] },
+  { id: "unpaid", label: "待付款", statuses: ["confirmed", "arrived"] },
+  { id: "toship", label: "待出貨", statuses: ["paid"] },
+  { id: "shipped", label: "已出貨", statuses: ["shipped"] },
+  { id: "done", label: "已完成", statuses: ["completed"] },
+  { id: "cancelled", label: "取消・棄單", statuses: CANCELLED },
+];
+
+/** 取消原因 → 對應狀態（棄單會計入預購條款第七條的次數） */
+export const CANCEL_REASONS: { status: OrderStatus; label: string; hint: string }[] = [
+  { status: "cancelled", label: "買家要求取消", hint: "不計入棄單" },
+  { status: "abandoned", label: "逾期未付款／未取貨（棄單）", hint: "計入棄單次數" },
+  { status: "unallocated", label: "缺貨或配額不足（未配到）", hint: "不計入棄單" },
+  { status: "cancelled", label: "其他", hint: "請在備註說明" },
+];
+
+/** 買家可以自行取消的狀態 */
+export const BUYER_CANCELLABLE: OrderStatus[] = ["pending", "confirmed"];
 
 export type NewOrder = {
   kind: OrderKind;

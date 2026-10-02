@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import { categories, conditions, type ProductView } from "../lib/types";
 import { ProductCard } from "./ProductCard";
+import { useStockMap } from "../lib/stock";
 
 type Sort = "new" | "price-asc" | "price-desc" | "number";
 const SORTS: { id: Sort; label: string }[] = [
@@ -89,7 +90,13 @@ function uniq(values: (string | undefined)[]): string[] {
   return Array.from(new Set(values.filter((v): v is string => !!v)));
 }
 
-export default function ShopBrowser({ products }: { products: ProductView[] }) {
+export default function ShopBrowser({ products: base }: { products: ProductView[] }) {
+  // 庫存換成扣掉訂單後的即時數字
+  const live = useStockMap();
+  const products = useMemo(
+    () => (live ? base.map((p) => (live[p.id] === undefined ? p : { ...p, stock: live[p.id] })) : base),
+    [base, live],
+  );
   const [f, setF] = useState<Filters>(EMPTY);
   const [drawer, setDrawer] = useState(false);
   const [ready, setReady] = useState(false);

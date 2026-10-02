@@ -9,6 +9,7 @@ import { api } from "../lib/api";
 import { PAY_DEADLINE_DAYS } from "../lib/orders";
 import type { ProductView } from "../lib/types";
 import { url } from "../lib/url";
+import { refreshStock, useLiveStock } from "../lib/stock";
 import { Stepper } from "./OrderPanel";
 
 // 預購商品的下單面板：必須登入、同意預購條款才能登記。不收訂金，到貨通知後才付款與選寄送方式。
@@ -17,8 +18,9 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
   const pre = p.preorder!;
   const { enabled: authOn, ready, user } = useAuth();
   const profile = useProfile();
-  const full = p.stock === 0;
-  const maxQty = Math.max(1, Math.min(p.stock, pre.limit ?? p.stock));
+  const stock = useLiveStock(p.id, p.stock); // 扣掉已登記後的剩餘名額
+  const full = stock === 0;
+  const maxQty = Math.max(1, Math.min(stock, pre.limit ?? stock));
   const [qty, setQty] = useState(1);
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -53,6 +55,7 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
       });
       const text = buildText(o.code);
       setDone({ code: o.code, text });
+      refreshStock();
       await copyAndOpenLine(text);
     } catch (e) {
       setError(e instanceof Error ? e.message : "登記失敗，請稍後再試");
@@ -70,7 +73,7 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
         <Info label="預計到貨" value={pre.eta} />
         {pre.deadline && <Info label="預購截止" value={pre.deadline} />}
         {pre.limit && <Info label="每人限購" value={`${pre.limit} 個`} />}
-        <Info label="剩餘名額" value={full ? "預購額滿" : `${p.stock} 個`} />
+        <Info label="剩餘名額" value={full ? "預購額滿" : `${stock} 個`} />
       </dl>
 
       <div class="mt-4 rounded-xl bg-bg p-3 text-xs leading-relaxed text-ink-soft">

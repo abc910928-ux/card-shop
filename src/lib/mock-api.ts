@@ -1,32 +1,30 @@
 // 本機開發用的假後端（PUBLIC_AUTH_MOCK=1）：資料存在 localStorage，行為模仿 Edge Function。
 // 正式建置不會用到這個檔案。
 import { ApiError } from "./api";
-import type { Member, NewOrder, Order, Profile, WishItem } from "./orders";
+import { url } from "./url";
+import { CANCELLED, HOLD_HOURS, type HistoryEntry, type Member, type NewOrder, type Order, type Profile, type WishItem } from "./orders";
 
-const KEY = "mock-db";
+const KEY = "mock-db-v2";
 const ME = "Umock0000000000000000000000000001";
 
+type DbOrder = Order & { lineUserId: string | null; createdMs: number };
 type Db = {
   profiles: Record<string, Omit<Profile, "isAdmin">>;
-  orders: (Order & { lineUserId: string })[];
+  orders: DbOrder[];
   wishlist: (WishItem & { lineUserId: string })[];
+  adjust: { productId: string; delta: number; note: string }[];
   seq: number;
 };
 
+const now = () => new Date().toISOString();
+const hist = (status: Order["status"], by: HistoryEntry["by"], note?: string): HistoryEntry => ({ status, at: now(), by, ...(note ? { note } : {}) });
+
 function seed(): Db {
-  const days = (n: number) => new Date(Date.now() - n * 86400_000).toISOString();
+  const ago = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
+  const base = { shipping: null, tracking: null, guest: false, holdsStock: true, note: null } as const;
   return {
     profiles: {
-      [ME]: {
-        lineUserId: ME,
-        displayName: "測試買家（管理員）",
-        pictureUrl: null,
-        realName: null,
-        phone: null,
-        storeName: null,
-        address: null,
-        preorderBlocked: false,
-      },
+      [ME]: { lineUserId: ME, displayName: "測試買家（管理員）", pictureUrl: null, realName: null, phone: null, storeName: null, address: null, preorderBlocked: false },
       Umock0000000000000000000000000002: {
         lineUserId: "Umock0000000000000000000000000002",
         displayName: "小明",
@@ -40,38 +38,25 @@ function seed(): Db {
     },
     orders: [
       {
+        ...base,
         id: 1,
         code: "TC-260925-AB12",
         lineUserId: "Umock0000000000000000000000000002",
-        kind: "preorder",
-        items: [{ productId: "tc-02-treasure-box", name: "海賊 TC-02寶藏箱", price: 3200, qty: 1 }],
-        shipping: null,
-        recipient: { name: "王小明", phone: "0912-000-000", store: "7-11 信義門市" },
-        total: 3200,
-        status: "arrived",
-        note: null,
-        createdAt: days(8),
-        updatedAt: days(5),
-        arrivedAt: days(5),
-      },
-      {
-        id: 2,
-        code: "TC-260901-CD34",
-        lineUserId: "Umock0000000000000000000000000002",
         kind: "stock",
         items: [{ productId: "tc-02-treasure-box", name: "海賊 TC-02寶藏箱", price: 3200, qty: 1 }],
-        shipping: { method: "711", label: "7-11 交貨便", fee: 90, declaredValue: 4000 },
         recipient: { name: "王小明", phone: "0912-000-000", store: "7-11 信義門市" },
         total: 3290,
-        status: "abandoned",
-        note: "逾期未付款",
-        createdAt: days(30),
-        updatedAt: days(25),
+        status: "paid",
+        history: [{ status: "pending", at: ago(3), by: "buyer" }, { status: "confirmed", at: ago(3), by: "admin" }, { status: "paid", at: ago(2), by: "admin" }],
+        createdAt: ago(3),
+        createdMs: Date.now() - 3 * 86400_000,
+        updatedAt: ago(2),
         arrivedAt: null,
       },
     ],
     wishlist: [],
-    seq: 2,
+    adjust: [],
+    seq: 1,
   };
 }
 
@@ -90,81 +75,137 @@ function save(db: Db) {
   } catch {}
 }
 
-const strip = ({ lineUserId: _, ...o }: Order & { lineUserId: string }): Order => o;
+function holds(o: DbOrder): boolean {
+  if (o.kind === "proxy" || CANCELLED.includes(o.status)) return false;
+  if (o.kind === "stock" && o.status === "pending") return Date.now() - o.createdMs < HOLD_HOURS * 3600_000;
+  return true;
+}
+const out = ({ lineUserId: _l, createdMs: _c, ...o }: DbOrder): Order => ({ ...o, holdsStock: holds({ ...o, lineUserId: null, createdMs: _c }) });
+
+async function inventory(db: Db, exclude?: number) {
+  const list: { id: string; name: string; stock: number; preorder: unknown }[] = (
+    await fetch(url("/products.json")).then((r) => r.json())
+  ).products;
+  return list.map((p) => {
+    const adjust = db.adjust.filter((a) => a.productId === p.id).reduce((s, a) => s + a.delta, 0);
+    const sold = db.orders
+      .filter((o) => o.id !== exclude && holds(o))
+      .flatMap((o) => o.items)
+      .filter((i) => i.productId === p.id)
+      .reduce((s, i) => s + i.qty, 0);
+    return { id: p.id, name: p.name, preorder: !!p.preorder, base: p.stock, adjust, sold, available: Math.max(0, p.stock + adjust - sold) };
+  });
+}
+async function ensure(db: Db, items: Order["items"], exclude?: number) {
+  const inv = await inventory(db, exclude);
+  for (const i of items) {
+    const s = inv.find((x) => x.id === i.productId);
+    if (s && i.qty > s.available) throw new ApiError(409, `「${i.name}」庫存不足（剩 ${s.available} 個）`);
+  }
+}
 
 export async function mockCall<T>(method: string, path: string, body?: unknown): Promise<T> {
   await new Promise((r) => setTimeout(r, 150)); // 模擬網路延遲
   const db = load();
   const me = db.profiles[ME];
-  const [route, query] = path.split("?");
-  const parts = route.split("/").filter(Boolean).map(decodeURIComponent);
-  const out = (v: unknown) => {
+  const loggedIn = (() => {
+    try {
+      return !!localStorage.getItem("mock-auth-user");
+    } catch {
+      return false;
+    }
+  })();
+  const parts = path.split("?")[0].split("/").filter(Boolean).map(decodeURIComponent);
+  const route = parts.join("/");
+  const done = (v: unknown) => {
     save(db);
     return v as T;
   };
 
-  if (route === "/me" && method === "GET") return out({ ...me, isAdmin: true });
-  if (route === "/me" && method === "PUT") {
+  if (route === "stock") return done(Object.fromEntries((await inventory(db)).map((s) => [s.id, s.available])));
+  if (route === "me" && method === "GET") return done({ ...me, isAdmin: true });
+  if (route === "me" && method === "PUT") {
     Object.assign(me, body);
-    return out({ ...me, isAdmin: true });
+    return done({ ...me, isAdmin: true });
   }
-  if (route === "/orders" && method === "GET")
-    return out(db.orders.filter((o) => o.lineUserId === ME).map(strip).reverse());
-  if (route === "/orders" && method === "POST") {
+  if (route === "orders" && method === "GET") return done(db.orders.filter((o) => o.lineUserId === ME).map(out).reverse());
+  if (route === "orders" && method === "POST") {
     const o = body as NewOrder;
     if (o.kind === "preorder" && me.preorderBlocked) throw new ApiError(403, "你的帳號目前無法預購，請 LINE 聯絡我們");
+    if (o.kind !== "proxy") await ensure(db, o.items);
     const subtotal = o.items.reduce((s, i) => s + i.price * i.qty, 0);
     const ship = o.kind === "stock" && o.shipping ? o.shipping.fee + (o.shipping.insuranceFee ?? 0) : 0;
-    const now = new Date().toISOString();
-    const order = {
+    const order: DbOrder = {
       id: ++db.seq,
-      code: `TC-${now.slice(2, 10).replaceAll("-", "")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-      lineUserId: ME,
+      code: `TC-MOCK-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+      lineUserId: loggedIn ? ME : null,
+      guest: !loggedIn,
       kind: o.kind,
       items: o.items,
       shipping: o.shipping ?? null,
       recipient: o.recipient ?? null,
       total: subtotal + ship,
-      status: "pending" as const,
+      status: "pending",
       note: o.note ?? null,
-      createdAt: now,
-      updatedAt: now,
+      tracking: null,
+      history: [hist("pending", "buyer", loggedIn ? undefined : "訪客下單")],
+      holdsStock: true,
+      createdAt: now(),
+      createdMs: Date.now(),
+      updatedAt: now(),
       arrivedAt: null,
     };
     db.orders.push(order);
-    return out(strip(order));
+    return done(out(order));
   }
-  if (route === "/wishlist" && method === "GET")
-    return out(db.wishlist.filter((w) => w.lineUserId === ME).map(({ lineUserId: _, ...w }) => w));
+  if (parts[0] === "orders" && parts[2] === "cancel") {
+    const o = db.orders.find((x) => x.id === Number(parts[1]) && x.lineUserId === ME);
+    if (!o) throw new ApiError(404, "找不到訂單");
+    if (!["pending", "confirmed"].includes(o.status)) throw new ApiError(409, "這筆訂單目前無法自行取消");
+    o.status = "cancelled";
+    o.history.push(hist("cancelled", "buyer", "買家自行取消"));
+    return done(out(o));
+  }
+  if (route === "wishlist" && method === "GET")
+    return done(db.wishlist.filter((w) => w.lineUserId === ME).map(({ lineUserId: _, ...w }) => w));
   if (parts[0] === "wishlist" && method === "PUT") {
     const snap = body as { price: number; stock: number };
-    const item = { productId: parts[1], priceAtAdd: snap.price, stockAtAdd: snap.stock, createdAt: new Date().toISOString() };
+    const item = { productId: parts[1], priceAtAdd: snap.price, stockAtAdd: snap.stock, createdAt: now() };
     db.wishlist = db.wishlist.filter((w) => !(w.lineUserId === ME && w.productId === parts[1]));
     db.wishlist.push({ ...item, lineUserId: ME });
-    return out(item);
+    return done(item);
   }
   if (parts[0] === "wishlist" && method === "DELETE") {
     db.wishlist = db.wishlist.filter((w) => !(w.lineUserId === ME && w.productId === parts[1]));
-    return out({ ok: true });
+    return done({ ok: true });
   }
-  if (route === "/admin/orders" && method === "GET") {
-    const status = new URLSearchParams(query).get("status");
-    return out(
+  if (route === "admin/orders" && method === "GET") {
+    return done(
       db.orders
-        .filter((o) => !status || o.status === status)
-        .map((o) => ({ ...strip(o), member: { displayName: db.profiles[o.lineUserId]?.displayName ?? "", realName: db.profiles[o.lineUserId]?.realName ?? null, phone: db.profiles[o.lineUserId]?.phone ?? null } }))
+        .map((o) => {
+          const p = o.lineUserId ? db.profiles[o.lineUserId] : null;
+          return { ...out(o), ...(p ? { member: { displayName: p.displayName, realName: p.realName, phone: p.phone } } : {}) };
+        })
         .reverse(),
     );
   }
   if (parts[0] === "admin" && parts[1] === "orders" && method === "PATCH") {
     const o = db.orders.find((x) => x.id === Number(parts[2]));
     if (!o) throw new ApiError(404, "找不到訂單");
-    const patch = body as { status?: Order["status"]; note?: string };
-    if (patch.status === "arrived" && o.status !== "arrived") o.arrivedAt = new Date().toISOString();
-    Object.assign(o, patch, { updatedAt: new Date().toISOString() });
-    return out(strip(o));
+    const patch = body as { status?: Order["status"]; note?: string; tracking?: string; reason?: string };
+    if (patch.status && patch.status !== o.status) {
+      const next = { ...o, status: patch.status, createdMs: patch.status === "pending" ? o.createdMs : Date.now() };
+      if (!holds(o) && holds(next)) await ensure(db, o.items, o.id);
+      o.status = patch.status;
+      o.history.push(hist(patch.status, "admin", patch.reason));
+      if (patch.status === "arrived") o.arrivedAt = now();
+    }
+    if (patch.note !== undefined) o.note = patch.note || null;
+    if (patch.tracking !== undefined) o.tracking = patch.tracking || null;
+    o.updatedAt = now();
+    return done(out(o));
   }
-  if (route === "/admin/members" && method === "GET") {
+  if (route === "admin/members" && method === "GET") {
     const members: Member[] = Object.values(db.profiles).map((p) => ({
       lineUserId: p.lineUserId,
       displayName: p.displayName,
@@ -174,15 +215,21 @@ export async function mockCall<T>(method: string, path: string, body?: unknown):
       preorderBlocked: p.preorderBlocked,
       orderCount: db.orders.filter((o) => o.lineUserId === p.lineUserId).length,
       abandonedCount: db.orders.filter((o) => o.lineUserId === p.lineUserId && o.status === "abandoned").length,
-      createdAt: new Date().toISOString(),
+      createdAt: now(),
     }));
-    return out(members);
+    return done(members);
   }
   if (parts[0] === "admin" && parts[1] === "members" && method === "PATCH") {
     const p = db.profiles[parts[2]];
     if (!p) throw new ApiError(404, "找不到會員");
     p.preorderBlocked = (body as { preorderBlocked: boolean }).preorderBlocked;
-    return out({ ...p, orderCount: 0, abandonedCount: 0, createdAt: "" });
+    return done({ ...p, orderCount: 0, abandonedCount: 0, createdAt: "" });
+  }
+  if (route === "admin/inventory" && method === "GET") return done(await inventory(db));
+  if (route === "admin/inventory" && method === "POST") {
+    const b = body as { productId: string; delta: number; note: string };
+    db.adjust.push(b);
+    return done((await inventory(db)).find((s) => s.id === b.productId));
   }
   throw new ApiError(404, `mock：沒有這個路由 ${method} ${path}`);
 }
