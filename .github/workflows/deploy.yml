@@ -29,7 +29,7 @@ jobs:
         env:
           # 會員功能的兩個公開設定；留空時網站照常運作，只是不顯示登入
           PUBLIC_LIFF_ID: "2011840313-v7ovYBx1" # LINE Developers 的 LIFF ID（頻道 2011840313）
-          PUBLIC_API_BASE: "" # https://<專案代號>.supabase.co/functions/v1/api
+          PUBLIC_API_BASE: "https://tkakorzpbjfclsepmqsb.supabase.co/functions/v1/api"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist

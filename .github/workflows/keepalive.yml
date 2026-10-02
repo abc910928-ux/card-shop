@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Ping /health
         env:
-          API_BASE: "" # 與 deploy.yml 的 PUBLIC_API_BASE 相同
+          API_BASE: "https://tkakorzpbjfclsepmqsb.supabase.co/functions/v1/api" # 與 deploy.yml 的 PUBLIC_API_BASE 相同
         run: |
           if [ -z "$API_BASE" ]; then echo "會員 API 尚未設定，略過"; exit 0; fi
           curl -fsS "$API_BASE/health"
