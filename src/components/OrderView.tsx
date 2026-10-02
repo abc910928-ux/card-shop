@@ -14,6 +14,7 @@ import {
   buyerStatus,
   itemLabel,
   kindLabel,
+  PAY_DEADLINE_DAYS,
   payDeadline,
   statusTone,
   type Order,
@@ -143,7 +144,10 @@ function Detail({
           <div class="text-lg font-bold text-ok">訂單已送出！</div>
           <p class="mt-1 text-sm leading-relaxed text-ink-soft">
             店家已收到通知，確認訂單後這頁的進度會更新
-            {o.payment?.method === "transfer" && "，並顯示匯款資訊"}。
+            {o.kind === "preorder"
+              ? "。預購不收訂金，商品到貨後會用 LINE 與這頁通知你轉帳"
+              : o.payment?.method === "transfer" && "，並顯示匯款資訊"}
+            。
             {guest && (
               <>
                 {" "}
@@ -312,7 +316,11 @@ function PaymentCard({
 
   const paid = ["paid", "shipped", "completed"].includes(o.status);
   const confirmedAt = [...o.history].reverse().find((h) => h.status === "confirmed")?.at;
-  const deadline = confirmedAt && new Date(new Date(confirmedAt).getTime() + shop.payDays * 86400_000);
+  const deadline =
+    o.kind === "preorder"
+      ? o.arrivedAt && payDeadline(o.arrivedAt)
+      : confirmedAt && new Date(new Date(confirmedAt).getTime() + shop.payDays * 86400_000);
+  const waitingArrival = o.kind === "preorder" && ["pending", "confirmed"].includes(o.status);
   const b = shop.bank;
 
   async function submit(e: Event) {
@@ -333,6 +341,10 @@ function PaymentCard({
     <Card title="付款：銀行轉帳">
       {paid ? (
         <p class="text-sm text-ok">已確認收款，謝謝！</p>
+      ) : waitingArrival ? (
+        <p class="text-sm text-ink-soft">
+          預購不收訂金，請先不用轉帳。商品到貨後會用 LINE 與這頁通知你，請在 {PAY_DEADLINE_DAYS} 天內轉帳 <b>{ntd(o.total)}</b>（含運費）。
+        </p>
       ) : o.status === "pending" ? (
         <p class="text-sm text-ink-soft">店家確認訂單（確認庫存）後，這裡會顯示匯款帳號，請先不用轉帳。</p>
       ) : (

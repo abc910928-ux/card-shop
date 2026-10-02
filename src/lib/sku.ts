@@ -11,7 +11,7 @@ export type ProductJson = {
   name: string;
   price: number;
   stock: number;
-  preorder: { eta: string; deadline?: string; limit?: number } | null;
+  preorder: { eta?: string; deadline?: string; limit?: number } | null;
   payments: PaymentId[];
   variants: { id: string; name: string; price: number; stock: number }[] | null;
 };

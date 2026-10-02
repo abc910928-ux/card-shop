@@ -23,7 +23,7 @@ export type ProductView = {
   stock: number; // 有規格時為各規格合計
   variants?: Variant[];
   payments: PaymentId[];
-  preorder?: { eta: string; deadline?: string; limit?: number };
+  preorder?: { eta?: string; deadline?: string; limit?: number };
   myshipUrl?: string;
   addedAt: string; // YYYY-MM-DD
   featured: boolean;

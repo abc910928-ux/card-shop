@@ -248,7 +248,7 @@ function OrderList() {
           </div>
           {o.status === "arrived" && o.arrivedAt && (
             <p class={`mt-2 rounded-lg p-2 text-xs ${isOverdue(o) ? "bg-sale/10 text-sale" : "bg-accent/15"}`}>
-              商品已到貨，請在 {payDeadline(o.arrivedAt).toLocaleDateString("zh-TW")} 前透過 LINE 完成付款
+              商品已到貨，請在 {payDeadline(o.arrivedAt).toLocaleDateString("zh-TW")} 前轉帳（匯款資訊在訂單頁）
               {isOverdue(o) && "（已超過付款期限，請盡快聯絡我們）"}
             </p>
           )}

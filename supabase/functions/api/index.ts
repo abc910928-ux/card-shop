@@ -44,6 +44,7 @@ const INACTIVE = ["cancelled", "abandoned", "unallocated"]; // 取消類：不�
 const ACTIVE = STATUSES.filter((s) => !INACTIVE.includes(s));
 // 現貨訂單「待確認」超過這個時數還沒被店家確認，就不再保留庫存（避免有人下單不理、占住庫存）
 const HOLD_HOURS = 24;
+const PAY_DAYS = 3; // 預購到貨後幾天內付款（預購條款第五條）
 
 // ─── 共用 ─────────────────────────────────────────────
 class HttpError extends Error {
@@ -222,11 +223,13 @@ function shipQuote(m: Row, goods: number, insure: boolean, declared?: number) {
   return { fee, insured, insuranceFee, declaredValue };
 }
 
-// ─── LINE 通知店家（Messaging API push；沒設定 token 就略過）──
-async function notifyShop(text: string) {
-  if (!LINE_TOKEN || NOTIFY_TO.length === 0) return;
+// ─── LINE 推播（Messaging API push；沒設定 token 就略過）──
+// 店家：新訂單、取消、回報匯款。買家：預購到貨的付款通知（買家要是官方帳號好友才收得到）
+const notifyShop = (text: string) => pushLine(NOTIFY_TO, text);
+async function pushLine(targets: string[], text: string) {
+  if (!LINE_TOKEN || targets.length === 0) return;
   const send = Promise.all(
-    NOTIFY_TO.map((to) =>
+    targets.map((to) =>
       fetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",
         headers: { Authorization: `Bearer ${LINE_TOKEN}`, "Content-Type": "application/json" },
@@ -247,6 +250,19 @@ async function notifyShop(text: string) {
 }
 
 const ntd = (n: number) => `NT$${n.toLocaleString("en-US")}`;
+function arrivalMessage(o: Row): string {
+  const due = new Date(Date.now() + 8 * 3600_000 + PAY_DAYS * 86400_000);
+  const items = o.items.map((i: Row) => `・${i.variant ? `${i.name}（${i.variant}）` : i.name} ×${i.qty}`).join("\n");
+  return [
+    "【TCG代購】你預購的商品到貨了！",
+    items,
+    "",
+    `請在 ${due.getUTCMonth() + 1}/${due.getUTCDate()} 前轉帳 ${ntd(o.total)}（含運費）。`,
+    "匯款帳號與回報匯款請到訂單頁：",
+    `${SITE_URL}/order/?code=${o.code}`,
+  ].join("\n");
+}
+
 function orderMessage(o: Row, buyer: string): string {
   const head = { stock: "🛒 新訂單", preorder: "📦 新預購", proxy: "🌏 新代購詢價" }[o.kind as string] ?? "新訂單";
   const lines = [`${head} ${o.code}`, `買家：${buyer}`];
@@ -468,6 +484,8 @@ async function handle(req: Request): Promise<unknown> {
       if (Object.keys(patch).length === 0) return orderOut(o);
       const row = check(await db.from("orders").update(patch).eq("id", id).select("*, profiles(display_name, real_name, phone)").single());
       stockCache = null;
+      // 預購到貨：用 LINE 通知買家轉帳付款
+      if (patch.status === "arrived" && row.line_user_id) await pushLine([row.line_user_id], arrivalMessage(row));
       return orderOut(row);
     }
     if (route === "admin/members" && m === "GET") {
@@ -547,12 +565,12 @@ async function createOrder(userId: string | null, me: Row | null, body: Row) {
   }
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
 
-  // 現貨：寄送方式、保價與付款方式都在網站結帳時決定，金額由這裡重新計算
+  // 現貨與預購：寄送方式、保價與付款方式都在網站結帳時決定，金額由這裡重新計算（預購只收轉帳，到貨後付款）
   let shipping: Row | null = null;
   let payment: Row | null = null;
   const r = body.recipient ?? {};
   const recipient = { name: str(r.name, 30), phone: str(r.phone, 20), store: str(r.store, 40), address: str(r.address, 120) };
-  if (kind === "stock") {
+  if (kind !== "proxy") {
     const s = body.shipping ?? {};
     const method = cat.shipping.find((x) => x.id === s.method && !x.requiresMyship);
     if (!method) throw new HttpError(400, "請選擇寄送方式");
@@ -570,6 +588,7 @@ async function createOrder(userId: string | null, me: Row | null, body: Row) {
 
     const pm = cat.payments.find((x) => x.id === body.payment?.method);
     if (!pm) throw new HttpError(400, "請選擇付款方式");
+    if (kind === "preorder" && pm.id !== "transfer") throw new HttpError(400, "預購只接受到貨後銀行轉帳");
     const prods = items.map((i) => cat.products.find((p) => p.id === i.productId)!);
     if (prods.some((p) => !(p.payments ?? ["transfer", "cod"]).includes(pm.id))) throw new HttpError(400, `有商品不接受「${pm.label}」`);
     if (!pm.shipping.includes(method.id)) throw new HttpError(400, `${method.short}不能用「${pm.label}」`);

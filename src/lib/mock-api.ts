@@ -167,7 +167,7 @@ export async function mockCall<T>(method: string, path: string, body?: unknown):
     if (o.kind === "preorder" && me.preorderBlocked) throw new ApiError(403, "你的帳號目前無法預購，請 LINE 聯絡我們");
     if (o.kind !== "proxy") await ensure(db, o.items);
     const subtotal = o.items.reduce((s, i) => s + i.price * i.qty, 0);
-    const ship = o.kind === "stock" && o.shipping ? o.shipping.fee + (o.shipping.insuranceFee ?? 0) : 0;
+    const ship = o.shipping ? o.shipping.fee + (o.shipping.insuranceFee ?? 0) : 0;
     const order: DbOrder = {
       id: ++db.seq,
       code: `TC-MOCK-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
@@ -231,7 +231,10 @@ export async function mockCall<T>(method: string, path: string, body?: unknown):
       if (!holds(o) && holds(next)) await ensure(db, o.items, o.id);
       o.status = patch.status;
       o.history.push(hist(patch.status, "admin", patch.reason));
-      if (patch.status === "arrived") o.arrivedAt = now();
+      if (patch.status === "arrived") {
+        o.arrivedAt = now();
+        if (o.lineUserId) console.info(`[mock] LINE 通知買家：${o.code} 到貨，請轉帳`);
+      }
     }
     if (patch.note !== undefined) o.note = patch.note || null;
     if (patch.tracking !== undefined) o.tracking = patch.tracking || null;

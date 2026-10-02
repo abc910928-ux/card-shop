@@ -94,7 +94,9 @@ export function ProductCard({ p, wish = false }: { p: ProductView; wish?: boolea
           </div>
           <div class="mt-0.5 text-[11px] text-muted">
             {p.preorder
-              ? `預計 ${p.preorder.eta} 到貨`
+              ? p.preorder.eta
+                ? `預計${p.preorder.eta}到貨`
+                : "預購中・到貨後通知付款"
               : soldOut
                 ? "已售完"
                 : p.variants?.length

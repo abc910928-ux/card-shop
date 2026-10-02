@@ -4,17 +4,15 @@ import { ntd } from "../lib/format";
 import { feeLabel } from "../lib/shipping";
 import { login, useAuth } from "../lib/auth";
 import { useProfile } from "../lib/profile";
-import { api } from "../lib/api";
 import { PAY_DEADLINE_DAYS } from "../lib/orders";
 import type { ProductView } from "../lib/types";
 import { url } from "../lib/url";
 import { skuOf } from "../lib/sku";
-import { refreshStock, useStockMap } from "../lib/stock";
+import { useStockMap } from "../lib/stock";
 import Stepper from "./Stepper";
 
-// 預購商品的下單面板：必須登入、同意預購條款才能登記。不收訂金，到貨通知後才付款與選寄送方式。
+// 預購商品的下單面板：選規格與數量，登入後進結帳頁登記（選寄送、填收件資料、同意預購條款）。不收訂金，到貨後通知轉帳。
 export default function PreorderPanel({ p }: { p: ProductView }) {
-  const termsHref = url("/terms/preorder/");
   const pre = p.preorder!;
   const { enabled: authOn, ready, user } = useAuth();
   const profile = useProfile();
@@ -29,32 +27,10 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
   const maxQty = Math.max(1, Math.min(stock, pre.limit ?? stock));
   const [qty, setQty] = useState(1);
   const q = Math.min(qty, maxQty);
-  const [agreed, setAgreed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<string | null>(null);
-  const [error, setError] = useState("");
-
-  async function submit() {
-    setBusy(true);
-    setError("");
-    try {
-      const o = await api.createOrder({
-        kind: "preorder",
-        items: [{ productId: p.id, variantId, variant: v?.name, name: p.name, price, qty: q }],
-        recipient: {
-          name: profile?.realName ?? undefined,
-          phone: profile?.phone ?? undefined,
-          store: profile?.storeName ?? undefined,
-          address: profile?.address ?? undefined,
-        },
-      });
-      setDone(o.code);
-      refreshStock();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "登記失敗，請稍後再試");
-    }
-    setBusy(false);
-  }
+  // 寄送方式、收件資料與條款同意都在結帳頁填（和現貨同一個結帳流程，只收轉帳）
+  const buyHref = url(
+    `/cart/?buy=${encodeURIComponent(p.id)}${variantId ? `&v=${encodeURIComponent(variantId)}` : ""}&qty=${q}`,
+  );
 
   return (
     <div class="rounded-2xl border border-line bg-surface p-5 sm:p-6">
@@ -63,7 +39,7 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
         <span class="font-display text-3xl font-bold">{ntd(price)}</span>
       </div>
       <dl class="mt-3 space-y-1 text-sm">
-        <Info label="預計到貨" value={pre.eta} />
+        <Info label="預計到貨" value={pre.eta ?? "到貨後通知"} />
         {pre.deadline && <Info label="預購截止" value={pre.deadline} />}
         {pre.limit && <Info label="每人限購" value={`${pre.limit} 個`} />}
         <Info label="剩餘名額" value={full ? "預購額滿" : `${stock} 個`} />
@@ -101,19 +77,12 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
       )}
 
       <div class="mt-4 rounded-xl bg-bg p-3 text-xs leading-relaxed text-ink-soft">
-        <b>不收訂金</b>：到貨後會在「我的訂單」通知，請在 {PAY_DEADLINE_DAYS} 天內付款並選寄送方式（
-        {shippingMethods.filter((m) => !m.requiresMyship).map((m) => `${m.short} ${feeLabel(m)}`).join("、")}）。
+        <b>不收訂金</b>：登記時選好寄送方式（
+        {shippingMethods.filter((m) => !m.requiresMyship).map((m) => `${m.short} ${feeLabel(m)}`).join("、")}
+        ）與收件資料，<b>到貨後會用 LINE 與訂單頁通知你轉帳</b>，請在 {PAY_DEADLINE_DAYS} 天內付款。
       </div>
 
-      {done ? (
-        <div class="mt-5 space-y-2 rounded-xl border border-ok/40 bg-ok/5 p-4 text-sm">
-          <div class="font-bold text-ok">已登記預購 {done}</div>
-          <p class="text-ink-soft">店家確認後，進度會更新在訂單頁。</p>
-          <a href={url(`/order/?code=${done}`)} class="inline-block font-medium underline underline-offset-2">
-            查看訂單進度 →
-          </a>
-        </div>
-      ) : full ? (
+      {full ? (
         <a
           href={shop.lineUrl}
           target="_blank"
@@ -141,22 +110,6 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
             </div>
           )}
 
-          <label class="flex cursor-pointer gap-2.5 rounded-xl border border-line p-3 text-sm">
-            <input
-              type="checkbox"
-              checked={agreed}
-              onChange={() => setAgreed(!agreed)}
-              class="mt-0.5 h-4 w-4 shrink-0 accent-ink"
-            />
-            <span>
-              我已閱讀並同意
-              <a href={termsHref} target="_blank" class="mx-0.5 underline">
-                預購服務條款
-              </a>
-              ，了解到貨通知後 {PAY_DEADLINE_DAYS} 天內要付款，逾期視為取消，累計棄單會停止受理預購。
-            </span>
-          </label>
-
           {!ready ? (
             <div class="h-12 animate-pulse rounded-xl bg-bg" />
           ) : !user ? (
@@ -171,18 +124,13 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
               你的帳號目前無法預購（依預購服務條款第七條），如有疑問請 LINE 聯絡我們。
             </p>
           ) : (
-            <button
-              onClick={submit}
-              disabled={!agreed || busy}
-              class="w-full rounded-xl bg-accent py-3.5 font-bold text-accent-ink transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+            <a
+              href={buyHref}
+              class="block w-full rounded-xl bg-accent py-3.5 text-center font-bold text-accent-ink transition hover:brightness-95"
             >
-              {busy ? "登記中…" : `登記預購 ${q} 個・${ntd(price * q)}`}
-            </button>
+              預購 {q} 個・{ntd(price * q)}
+            </a>
           )}
-          {user && !agreed && !profile?.preorderBlocked && (
-            <p class="text-center text-xs text-muted">請先勾選同意預購服務條款</p>
-          )}
-          {error && <p class="text-center text-xs text-sale">{error}</p>}
           <p class="text-center text-xs text-muted">預購商品需要登入 LINE，現貨商品不用</p>
         </div>
       )}

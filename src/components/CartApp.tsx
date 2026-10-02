@@ -6,6 +6,7 @@ import { ntd, subline } from "../lib/format";
 import { login, useAuth } from "../lib/auth";
 import { setProfile, useProfile } from "../lib/profile";
 import { api, ApiError } from "../lib/api";
+import { PAY_DEADLINE_DAYS } from "../lib/orders";
 import { clearCart, rememberOrder, removeFromCart, setCartQty, useCart, type CartLine } from "../lib/cart";
 import { skuOf } from "../lib/sku";
 import { refreshStock, useStockMap } from "../lib/stock";
@@ -39,14 +40,19 @@ export default function CartApp({ products }: { products: ProductView[] }) {
   const rows = lines.map((l) => {
     const p = products.find((x) => x.id === l.productId);
     const v = p?.variants?.find((x) => x.id === l.variantId);
-    const valid = !!p && !p.preorder && (p.variants?.length ? !!v : !l.variantId);
+    // 預購商品只能從商品頁「預購」直接結帳（不放購物車）
+    const valid = !!p && (!p.preorder || !!buyNow) && (p.variants?.length ? !!v : !l.variantId);
     const sku = skuOf(l.productId, l.variantId);
-    const available = live?.[sku] ?? v?.stock ?? p?.stock ?? 0;
+    const stock = live?.[sku] ?? v?.stock ?? p?.stock ?? 0;
+    const available = Math.min(stock, p?.preorder?.limit ?? Infinity);
     return { line: l, p, v, valid, sku, available, price: v?.price ?? p?.price ?? 0 };
   });
   const ok = rows.filter((r) => r.valid && r.available > 0);
   const goods = ok.reduce((s, r) => s + r.price * Math.min(r.line.qty, r.available), 0);
   const overStock = ok.some((r) => r.line.qty > r.available);
+  // 預購：要登入、同意預購條款，只收轉帳（到貨後通知付款）
+  const preorder = !!ok[0]?.p?.preorder;
+  const [agreed, setAgreed] = useState(false);
 
   function changeQty(l: CartLine, n: number) {
     if (buyNow) setBuyNow({ ...buyNow, qty: n });
@@ -72,7 +78,9 @@ export default function CartApp({ products }: { products: ProductView[] }) {
   const q = quote(method.id, goods, { insure: ship.insure, declared: ship.declared });
 
   // ── 付款：所有商品都接受、且能搭配目前寄送方式 ──
-  const accepted = paymentMethods.filter((pm) => ok.every((r) => r.p!.payments.includes(pm.id)));
+  const accepted = paymentMethods.filter(
+    (pm) => ok.every((r) => r.p!.payments.includes(pm.id)) && (!preorder || pm.id === "transfer"),
+  );
   const payState = (pm: (typeof paymentMethods)[number]) =>
     !pm.shipping.includes(method.id)
       ? `${method.short}不提供`
@@ -124,12 +132,12 @@ export default function CartApp({ products }: { products: ProductView[] }) {
       document.querySelector("[data-recipient]")?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    if (!pay || overStock || !anyShip || ok.length === 0) return;
+    if (!pay || overStock || !anyShip || ok.length === 0 || (preorder && !agreed)) return;
     setBusy(true);
     const phone = form.phone.trim();
     try {
       const o = await api.createOrder({
-        kind: "stock",
+        kind: preorder ? "preorder" : "stock",
         items: ok.map((r) => ({
           productId: r.p!.id,
           variantId: r.v?.id,
@@ -187,6 +195,23 @@ export default function CartApp({ products }: { products: ProductView[] }) {
       </div>
     );
 
+  if (preorder && ready && !user)
+    return (
+      <div class="rounded-2xl border border-dashed border-line bg-surface px-6 py-14 text-center">
+        <div class="text-lg font-bold">預購需要 LINE 登入</div>
+        <p class="mt-2 text-sm text-muted">登入後選寄送方式、填收件資料就能登記，到貨時會用 LINE 通知你轉帳。</p>
+        <button onClick={() => login()} class="mt-5 rounded-xl bg-[#06c755] px-6 py-3 font-bold text-white">
+          LINE 登入
+        </button>
+      </div>
+    );
+  if (preorder && profile?.preorderBlocked)
+    return (
+      <p class="rounded-2xl bg-sale/10 p-6 text-center text-sm text-sale">
+        你的帳號目前無法預購（依預購服務條款第七條），如有疑問請 LINE 聯絡我們。
+      </p>
+    );
+
   const field = (k: keyof Form, label: string, props: Record<string, unknown> = {}, hint?: ComponentChildren) => (
     <label class="block">
       <span class="mb-1.5 block text-sm font-medium">{label}</span>
@@ -211,7 +236,7 @@ export default function CartApp({ products }: { products: ProductView[] }) {
     <form onSubmit={submit} class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-8">
       <div class="space-y-6">
         {/* 1. 商品 */}
-        <Section n={1} title={buyNow ? "直接購買" : "購物車"}>
+        <Section n={1} title={preorder ? "預購" : buyNow ? "直接購買" : "購物車"}>
           {buyNow && cart.length > 0 && (
             <p class="mb-3 text-xs text-muted">
               只結帳這一件，購物車裡的 {cart.length} 項商品不受影響（
@@ -332,7 +357,11 @@ export default function CartApp({ products }: { products: ProductView[] }) {
                             <span>{pm.label}</span>
                             {pm.fee > 0 && <span>+{ntd(pm.fee)}</span>}
                           </div>
-                          <div class="mt-0.5 text-xs text-muted">{why ? `無法選擇：${why}` : pm.note}</div>
+                          <div class="mt-0.5 text-xs text-muted">{why
+                            ? `無法選擇：${why}`
+                            : preorder
+                              ? `不收訂金，商品到貨後通知你，${PAY_DEADLINE_DAYS} 天內轉帳`
+                              : pm.note}</div>
                         </div>
                       </label>
                     );
@@ -346,7 +375,7 @@ export default function CartApp({ products }: { products: ProductView[] }) {
 
             {/* 4. 收件資料 */}
             <Section n={4} title="收件資料" anchor>
-              {authOn && ready && !user && (
+              {authOn && ready && !user && !preorder && (
                 <p class="mb-4 rounded-lg bg-bg px-3 py-2.5 text-xs text-ink-soft">
                   不用登入也能下單。
                   <button type="button" onClick={() => login()} class="mx-0.5 font-medium underline underline-offset-2">
@@ -424,17 +453,34 @@ export default function CartApp({ products }: { products: ProductView[] }) {
               遺失最高理賠 {ntd(q.coverCap)}
             </div>
           </dl>
+          {preorder && (
+            <label class="mt-3 flex cursor-pointer gap-2.5 rounded-lg border border-line p-3 text-xs leading-relaxed">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={() => setAgreed(!agreed)}
+                class="mt-0.5 h-4 w-4 shrink-0 accent-ink"
+              />
+              <span>
+                我已閱讀並同意
+                <a href={url("/terms/preorder/")} target="_blank" class="mx-0.5 underline">
+                  預購服務條款
+                </a>
+                ，了解到貨通知後 {PAY_DEADLINE_DAYS} 天內要轉帳，逾期視為取消，累計棄單會停止受理預購。
+              </span>
+            </label>
+          )}
           {pay && (
             <p class="mt-3 rounded-lg bg-bg px-3 py-2 text-xs text-ink-soft">
-              付款：{pay.label}・{pay.note}
+              付款：{pay.label}・{preorder ? `商品到貨後會用 LINE 與訂單頁通知你，請在 ${PAY_DEADLINE_DAYS} 天內轉帳` : pay.note}
             </p>
           )}
           <button
             type="submit"
-            disabled={busy || !pay || overStock || !anyShip}
+            disabled={busy || !pay || overStock || !anyShip || (preorder && (!agreed || !user || !!profile?.preorderBlocked))}
             class="mt-4 w-full rounded-xl bg-accent py-3.5 font-bold text-accent-ink transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {busy ? "送出中…" : `送出訂單・${ntd(total)}`}
+            {busy ? "送出中…" : preorder ? `送出預購・${ntd(total)}` : `送出訂單・${ntd(total)}`}
           </button>
           {tried && Object.keys(errors).length > 0 && (
             <p class="mt-2 text-center text-xs text-sale">收件資料還沒填完整</p>
@@ -442,9 +488,9 @@ export default function CartApp({ products }: { products: ProductView[] }) {
           {overStock && <p class="mt-2 text-center text-xs text-sale">有商品超過剩餘數量，請先調整</p>}
           {error && <p class="mt-2 text-center text-xs text-sale">{error}</p>}
           <p class="mt-3 text-center text-[11px] leading-relaxed text-muted">
-            送出後店家會收到通知並確認訂單，進度可在訂單頁查看。
+            {preorder ? "預購不收訂金，到貨後才付款。" : "送出後店家會收到通知並確認訂單，進度可在訂單頁查看。"}
             <br />
-            {shop.leadTime}。
+            {preorder ? "付款確認後 1–2 個工作天內出貨。" : `${shop.leadTime}。`}
           </p>
         </aside>
       )}

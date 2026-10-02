@@ -38,7 +38,7 @@ const products = defineCollection({
       // 有填就是預購商品（必須登入才能預購）
       preorder: z
         .object({
-          eta: z.string(), // 預計到貨，例："2026 年 11 月中"
+          eta: z.string().optional(), // 預計到貨，例："2026 年 11 月中"；還不確定就不填
           deadline: z.string().optional(), // 預購截止，例："10/31"
           limit: z.number().int().positive().optional(), // 每人限購
         })
