@@ -2,7 +2,6 @@
 name: 標準尺寸卡套 66×91mm（100 入）
 category: 周邊
 game: 通用
-condition: 全新
 price: 120
 stock: 30
 images: []

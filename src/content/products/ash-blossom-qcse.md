@@ -1,10 +1,9 @@
 ---
 name: 灰流麗
-category: 單卡
+category: 單卡&卡冊
 game: 遊戲王
 rarity: QCSE
 language: 日文
-condition: 近全新
 price: 1850
 stock: 1
 images: []

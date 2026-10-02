@@ -31,7 +31,6 @@ const specs = [
   ["卡號", p.number],
   ["稀有度", p.rarity],
   ["語言", p.language],
-  ["卡況", p.condition],
   ["鑑定", p.grade && `${p.grade.company} ${p.grade.score}`],
 ].filter((s): s is [string, string] => !!s[1]);
 
@@ -92,7 +91,7 @@ const related = await Promise.all(
         <details class="mt-4 rounded-xl border border-line bg-surface p-4 text-sm">
           <summary class="cursor-pointer font-medium">購買須知</summary>
           <ul class="mt-3 list-disc space-y-1.5 pl-5 text-ink-soft">
-            <li>單卡皆為實拍，卡況以照片為準，卡況定義見<a href={url("/guide/#condition")} class="underline">購物說明</a>。</li>
+            <li>商品皆為實拍，狀況以照片為準。</li>
             <li>{shop.leadTime}。</li>
             {
               p.preorder ? (

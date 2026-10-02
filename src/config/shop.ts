@@ -6,7 +6,7 @@
 export const shop = {
   name: "TCG代購", // 店名
   tagline: "TCG Singles · Sealed · Graded",
-  description: "TCG代購：單卡、原盒、鑑定卡與周邊。7-11 賣貨便、交貨便或黑貓宅配，可選保價。",
+  description: "TCG代購：單卡、卡冊、原盒、鑑定卡與周邊。7-11 賣貨便、交貨便或黑貓宅配，可選保價。",
 
   // 頂部公告條
   announcements: [

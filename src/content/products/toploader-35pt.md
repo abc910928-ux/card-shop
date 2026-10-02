@@ -2,7 +2,6 @@
 name: 35pt 磁吸卡磚
 category: 周邊
 game: 通用
-condition: 全新
 price: 90
 stock: 50
 images: []

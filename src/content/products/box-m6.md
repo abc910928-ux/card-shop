@@ -4,7 +4,6 @@ category: 原盒・擴充包
 game: 寶可夢
 set: M6 綠寶石風暴
 language: 繁中
-condition: 全新
 price: 1800
 stock: 3
 images: []

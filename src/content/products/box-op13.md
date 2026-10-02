@@ -4,7 +4,6 @@ category: 原盒・擴充包
 game: 航海王
 set: OP-13 傳承的意志
 language: 日文
-condition: 全新
 price: 3600
 stock: 2
 images: []

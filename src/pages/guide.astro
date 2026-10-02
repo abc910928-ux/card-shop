@@ -11,12 +11,6 @@ const myshipCap = coverageOf("myship", "fixed").cap;
 // 黑貓保價費試算範例
 const samples = [1000, 8000, 20000, 26800, 50000];
 
-const conditionDefs = [
-  ["全新", "開包即入套，無任何白點、刮痕或邊角磨損。"],
-  ["近全新", "需近看才能察覺的極輕微瑕疵，例如背面一處小白點。"],
-  ["輕微瑕疵", "正常距離可見的小白點、輕微刮痕或邊角磨損，不影響收藏。"],
-  ["明顯瑕疵", "明顯的白邊、壓痕、折痕或凹痕，適合對戰用，價格已反映卡況。"],
-];
 ---
 
 <Base title="購物說明">
@@ -190,19 +184,6 @@ const conditionDefs = [
       <p class="mt-1 text-sm text-ink-soft">沒有保價選項，遺失依訂單金額理賠，上限 {ntd(myshipCap)}。</p>
     </section>
 
-    <section class="mt-10" id="condition">
-      <h2 class="text-xl font-bold">卡況分級</h2>
-      <dl class="mt-4 divide-y divide-line rounded-xl border border-line bg-surface">
-        {
-          conditionDefs.map(([k, v]) => (
-            <div class="flex gap-4 px-4 py-3 text-sm">
-              <dt class="w-20 shrink-0 font-medium">{k}</dt>
-              <dd class="text-ink-soft">{v}</dd>
-            </div>
-          ))
-        }
-      </dl>
-    </section>
 
     <section class="mt-10">
       <h2 class="text-xl font-bold">出貨與退換</h2>

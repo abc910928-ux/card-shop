@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
-import { categories, conditions, type ProductView } from "../lib/types";
+import { categories, type ProductView } from "../lib/types";
 import { ProductCard } from "./ProductCard";
 import { useStockMap } from "../lib/stock";
 
@@ -27,7 +27,6 @@ type Filters = {
   game: string;
   set: string;
   rarity: string[];
-  condition: string[];
   language: string[];
   inStock: boolean;
   supply: Supply;
@@ -40,7 +39,6 @@ const EMPTY: Filters = {
   game: ALL,
   set: ALL,
   rarity: [],
-  condition: [],
   language: [],
   inStock: false,
   supply: "all",
@@ -58,7 +56,6 @@ function fromQuery(search: string): Filters {
     game: sp.get("game") ?? ALL,
     set: sp.get("set") ?? ALL,
     rarity: list("rarity"),
-    condition: list("condition"),
     language: list("language"),
     inStock: sp.get("instock") === "1",
     supply: (SUPPLY.find((x) => x.id === sp.get("supply"))?.id ?? "all") as Supply,
@@ -67,7 +64,7 @@ function fromQuery(search: string): Filters {
 }
 
 // 篩選用到的參數；其他參數（例如 LINE 登入導回時帶的 code、liff.state）原封保留
-const MANAGED = ["q", "category", "game", "set", "rarity", "condition", "language", "instock", "supply", "sort"];
+const MANAGED = ["q", "category", "game", "set", "rarity", "language", "instock", "supply", "sort"];
 
 function toQuery(f: Filters, current: string): string {
   const sp = new URLSearchParams(current);
@@ -77,7 +74,6 @@ function toQuery(f: Filters, current: string): string {
   if (f.game !== ALL) sp.set("game", f.game);
   if (f.set !== ALL) sp.set("set", f.set);
   if (f.rarity.length) sp.set("rarity", f.rarity.join(","));
-  if (f.condition.length) sp.set("condition", f.condition.join(","));
   if (f.language.length) sp.set("language", f.language.join(","));
   if (f.inStock) sp.set("instock", "1");
   if (f.supply !== "all") sp.set("supply", f.supply);
@@ -111,7 +107,7 @@ export default function ShopBrowser({ products: base }: { products: ProductView[
   }, [f, ready]);
 
   const set = (patch: Partial<Filters>) => setF((prev) => ({ ...prev, ...patch }));
-  const toggle = (key: "rarity" | "condition" | "language", v: string) =>
+  const toggle = (key: "rarity" | "language", v: string) =>
     setF((prev) => ({
       ...prev,
       [key]: prev[key].includes(v) ? prev[key].filter((x) => x !== v) : [...prev[key], v],
@@ -130,14 +126,12 @@ export default function ShopBrowser({ products: base }: { products: ProductView[
   const sets = useMemo(() => uniq(inGame.map((p) => p.set)), [inGame]);
   const rarities = useMemo(() => uniq(inGame.map((p) => p.rarity)), [inGame]);
   const languages = useMemo(() => uniq(inGame.map((p) => p.language)), [inGame]);
-  const showCondition = f.category === ALL || f.category === "單卡";
 
   const results = useMemo(() => {
     const q = f.q.trim().toLowerCase();
     const list = inGame.filter((p) => {
       if (f.set !== ALL && p.set !== f.set) return false;
       if (f.rarity.length && !f.rarity.includes(p.rarity ?? "")) return false;
-      if (f.condition.length && !f.condition.includes(p.condition ?? "")) return false;
       if (f.language.length && !f.language.includes(p.language ?? "")) return false;
       if (f.inStock && p.stock === 0) return false;
       if (f.supply === "stock" && p.preorder) return false;
@@ -165,7 +159,6 @@ export default function ShopBrowser({ products: base }: { products: ProductView[
     (f.game !== ALL ? 1 : 0) +
     (f.set !== ALL ? 1 : 0) +
     f.rarity.length +
-    f.condition.length +
     f.language.length +
     (f.inStock ? 1 : 0) +
     (f.supply !== "all" ? 1 : 0);
@@ -188,7 +181,7 @@ export default function ShopBrowser({ products: base }: { products: ProductView[
         <Pills
           options={[ALL, ...categories]}
           value={f.category}
-          onSelect={(v) => set({ category: v, game: ALL, set: ALL, rarity: [], condition: [] })}
+          onSelect={(v) => set({ category: v, game: ALL, set: ALL, rarity: [] })}
         />
       </Group>
 
@@ -223,15 +216,6 @@ export default function ShopBrowser({ products: base }: { products: ProductView[
         </Group>
       )}
 
-      {showCondition && (
-        <Group title="卡況">
-          <Checks
-            options={conditions}
-            values={f.condition}
-            onToggle={(v) => toggle("condition", v)}
-          />
-        </Group>
-      )}
 
       {languages.length > 1 && (
         <Group title="語言">

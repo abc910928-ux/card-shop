@@ -1,12 +1,11 @@
 ---
 name: 紅髮傑克
-category: 單卡
+category: 單卡&卡冊
 game: 航海王
 set: OP-01 ROMANCE DAWN
 number: OP01-120
 rarity: SEC
 language: 日文
-condition: 近全新
 price: 3200
 stock: 1
 images: []

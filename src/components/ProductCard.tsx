@@ -75,15 +75,12 @@ export function ProductCard({ p, wish = false }: { p: ProductView; wish?: boolea
         </div>
         <h3 class="line-clamp-2 text-sm font-medium leading-snug">
           {p.name}
-          {p.rarity && p.category === "單卡" && (
+          {p.rarity && p.category === "單卡&卡冊" && (
             <span class="ml-1 text-muted">{p.rarity}</span>
           )}
         </h3>
         <div class="flex flex-wrap gap-1">
           {p.language && <Chip>{p.language}</Chip>}
-          {p.condition && p.category !== "原盒・擴充包" && p.category !== "周邊" && (
-            <Chip>{p.condition}</Chip>
-          )}
         </div>
         <div class="mt-auto pt-1 leading-tight">
           <div class="flex flex-wrap items-baseline gap-x-1">

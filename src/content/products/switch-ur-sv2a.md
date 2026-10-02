@@ -1,12 +1,11 @@
 ---
 name: 寶可夢交替
-category: 單卡
+category: 單卡&卡冊
 game: 寶可夢
 set: sv2a 寶可夢卡牌151
 number: 209/165
 rarity: UR
 language: 繁中
-condition: 近全新
 price: 2400
 originalPrice: 2800
 stock: 0

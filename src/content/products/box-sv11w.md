@@ -4,7 +4,6 @@ category: 原盒・擴充包
 game: 寶可夢
 set: sv11W 純白閃焰
 language: 繁中
-condition: 全新
 price: 1450
 originalPrice: 1600
 stock: 6

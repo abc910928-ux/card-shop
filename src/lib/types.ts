@@ -1,11 +1,8 @@
 // 給互動元件（Preact）用的商品資料：只含可序列化的欄位，不依賴 astro:content
 import type { PaymentId } from "../config/shop";
 
-export type Category = "單卡" | "原盒・擴充包" | "鑑定卡" | "周邊";
-export const categories: Category[] = ["單卡", "原盒・擴充包", "鑑定卡", "周邊"];
-
-export type Condition = "全新" | "近全新" | "輕微瑕疵" | "明顯瑕疵";
-export const conditions: Condition[] = ["全新", "近全新", "輕微瑕疵", "明顯瑕疵"];
+export type Category = "單卡&卡冊" | "原盒・擴充包" | "鑑定卡" | "周邊";
+export const categories: Category[] = ["單卡&卡冊", "原盒・擴充包", "鑑定卡", "周邊"];
 
 export type Variant = { id: string; name: string; price: number; originalPrice?: number; stock: number };
 
@@ -19,7 +16,6 @@ export type ProductView = {
   number?: string;
   rarity?: string;
   language?: string;
-  condition?: Condition;
   grade?: { company: string; score: string };
   price: number; // 有規格時為最低價
   priceMax: number; // 有規格且價格不同時 > price

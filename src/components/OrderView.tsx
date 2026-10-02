@@ -334,7 +334,7 @@ function PaymentCard({
       {paid ? (
         <p class="text-sm text-ok">已確認收款，謝謝！</p>
       ) : o.status === "pending" ? (
-        <p class="text-sm text-ink-soft">店家確認訂單（確認庫存與卡況）後，這裡會顯示匯款帳號，請先不用轉帳。</p>
+        <p class="text-sm text-ink-soft">店家確認訂單（確認庫存）後，這裡會顯示匯款帳號，請先不用轉帳。</p>
       ) : (
         <div class="space-y-3 text-sm">
           {b.account ? (

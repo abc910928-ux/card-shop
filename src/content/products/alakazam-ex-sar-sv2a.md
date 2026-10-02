@@ -1,12 +1,11 @@
 ---
 name: 胡地ex
-category: 單卡
+category: 單卡&卡冊
 game: 寶可夢
 set: sv2a ポケモンカード151
 number: 203/165
 rarity: SAR
 language: 日文
-condition: 輕微瑕疵
 price: 980
 stock: 2
 images: []
