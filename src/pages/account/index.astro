@@ -1,0 +1,22 @@
+---
+import Base from "../../layouts/Base.astro";
+import AccountApp, { type WishProduct } from "../../components/AccountApp";
+import { getProductViews } from "../../lib/catalog";
+
+// 收藏清單要和目前商品比對（已降價／已補貨），在建置時把商品資料傳給互動元件
+const products: WishProduct[] = (await getProductViews()).map((p) => ({
+  id: p.id,
+  name: p.name,
+  href: p.href,
+  price: p.price,
+  stock: p.stock,
+  thumb: p.thumb,
+  preorder: !!p.preorder,
+}));
+---
+
+<Base title="我的帳號" noindex>
+  <section class="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+    <AccountApp client:load products={products} />
+  </section>
+</Base>

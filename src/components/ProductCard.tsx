@@ -2,8 +2,10 @@ import type { ComponentChildren } from "preact";
 import type { ProductView } from "../lib/types";
 import { discountPercent, ntd, rarityTier, subline } from "../lib/format";
 import { CardArt } from "./CardArt";
+import WishlistButton from "./WishlistButton";
 
-export function ProductCard({ p }: { p: ProductView }) {
+// wish：顯示愛心收藏按鈕（只在會互動的列表裡開，靜態頁面上按不了）
+export function ProductCard({ p, wish = false }: { p: ProductView; wish?: boolean }) {
   const soldOut = p.stock === 0;
   const off = discountPercent(p);
   const tier = rarityTier(p.rarity);
@@ -42,18 +44,27 @@ export function ProductCard({ p }: { p: ProductView }) {
           )}
         </div>
 
-        {/* 右上：特價 */}
-        {off > 0 && !soldOut && (
-          <span class="absolute right-2 top-2 rounded bg-sale px-1.5 py-0.5 text-[11px] font-bold text-white">
-            -{off}%
-          </span>
-        )}
+        {/* 右上：預購、特價 */}
+        <div class="absolute right-2 top-2 flex flex-col items-end gap-1">
+          {p.preorder && (
+            <span class="rounded bg-accent px-1.5 py-0.5 text-[11px] font-bold text-accent-ink">預購</span>
+          )}
+          {off > 0 && !soldOut && (
+            <span class="rounded bg-sale px-1.5 py-0.5 text-[11px] font-bold text-white">-{off}%</span>
+          )}
+        </div>
 
         {soldOut && (
           <div class="absolute inset-0 grid place-items-center bg-white/60 backdrop-grayscale">
             <span class="rounded-full bg-ink/85 px-3 py-1 text-xs font-medium text-white">
-              已售完
+              {p.preorder ? "預購額滿" : "已售完"}
             </span>
+          </div>
+        )}
+
+        {wish && (
+          <div class="absolute bottom-2 right-2">
+            <WishlistButton productId={p.id} price={p.price} stock={p.stock} />
           </div>
         )}
       </div>
@@ -84,7 +95,11 @@ export function ProductCard({ p }: { p: ProductView }) {
             )}
           </div>
           <div class="mt-0.5 text-[11px] text-muted">
-            {soldOut ? "已售完" : `剩 ${p.stock} 件`}
+            {p.preorder
+              ? `預計 ${p.preorder.eta} 到貨`
+              : soldOut
+                ? "已售完"
+                : `剩 ${p.stock} 件`}
           </div>
         </div>
       </div>

@@ -20,6 +20,7 @@ export type ProductView = {
   price: number;
   originalPrice?: number;
   stock: number;
+  preorder?: { eta: string; deadline?: string; limit?: number };
   myshipUrl?: string;
   addedAt: string; // YYYY-MM-DD
   featured: boolean;

@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 # 本機預覽設定（含本機路徑）
 /.claude/
+
+# 本機開發設定（例如 PUBLIC_AUTH_MOCK=1）
+.env.development.local

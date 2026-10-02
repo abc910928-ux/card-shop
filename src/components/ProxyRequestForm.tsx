@@ -2,6 +2,8 @@ import { useMemo, useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import { shop } from "../config/shop";
 import { copyAndOpenLine } from "../lib/line";
+import { useAuth } from "../lib/auth";
+import { api } from "../lib/api";
 
 const KINDS = ["鑑定卡", "未鑑定單卡", "原盒・卡包", "其他"] as const;
 
@@ -16,13 +18,17 @@ export default function ProxyRequestForm({ termsHref }: { termsHref: string }) {
   const [note, setNote] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [copied, setCopied] = useState<"" | "ok" | "fail">("");
+  const [code, setCode] = useState<string | undefined>();
+  const { user } = useAuth();
 
   // 任何 http(s) 網址都可以，只檢查格式完整
   const linkOk = /^https?:\/\/[^\s/]+\.[^\s/]+(\/\S*)?$/i.test(link.trim());
   const canSend = linkOk && agreed;
 
-  const text = useMemo(() => {
-    const lines = [`【${shop.name} 海外代購詢價】`, `商品網址：${link.trim()}`];
+  const buildText = (orderCode?: string) => {
+    const lines = [`【${shop.name} 海外代購詢價】`];
+    if (orderCode) lines.push(`詢價編號：${orderCode}`);
+    lines.push(`商品網址：${link.trim()}`);
     if (name.trim()) lines.push(`商品：${name.trim()}`);
     lines.push(`類型：${kind}${spec.trim() ? `（${spec.trim()}）` : ""}`, `數量：${qty}`);
     if (price.trim()) lines.push(`網站標價：${price.trim()}`);
@@ -30,10 +36,34 @@ export default function ProxyRequestForm({ termsHref }: { termsHref: string }) {
     // 留下「事先告知並同意」的紀錄
     lines.push("", "我已閱讀並同意代購服務條款，了解代購商品不適用七日鑑賞期。");
     return lines.join("\n");
-  }, [link, name, kind, spec, qty, price, note]);
+  };
+  const text = useMemo(() => buildText(code), [link, name, kind, spec, qty, price, note, code]);
 
   async function send() {
-    setCopied((await copyAndOpenLine(text)) ? "ok" : "fail");
+    let orderCode = code;
+    // 已登入：詢價也存一筆紀錄，之後在「我的訂單」看得到進度
+    if (user && !orderCode) {
+      try {
+        const o = await api.createOrder({
+          kind: "proxy",
+          items: [
+            {
+              name: name.trim() || "海外代購商品",
+              price: 0,
+              qty,
+              url: link.trim(),
+              spec: [kind, spec.trim(), price.trim() && `標價 ${price.trim()}`].filter(Boolean).join("・"),
+            },
+          ],
+          note: note.trim() || undefined,
+        });
+        orderCode = o.code;
+        setCode(orderCode);
+      } catch {
+        // 存檔失敗不影響用 LINE 詢價
+      }
+    }
+    setCopied((await copyAndOpenLine(buildText(orderCode))) ? "ok" : "fail");
   }
 
   const input =
@@ -42,7 +72,7 @@ export default function ProxyRequestForm({ termsHref }: { termsHref: string }) {
   return (
     <div class="rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <h2 class="text-lg font-bold">代購詢價單</h2>
-      <p class="mt-1 text-xs text-muted">填好後會複製成文字並開啟 LINE，貼上送出即可，我們會回覆報價。</p>
+      <p class="mt-1 text-xs text-muted">填好後會開啟 LINE 官方帳號並自動填好詢價單，按送出即可，我們會回覆報價。</p>
 
       <div class="mt-5 space-y-4">
         <Field label="商品網址" required>
@@ -145,14 +175,14 @@ export default function ProxyRequestForm({ termsHref }: { termsHref: string }) {
         </button>
         <p class="text-center text-xs text-muted">
           {copied === "ok"
-            ? "已複製詢價單，請在 LINE 對話中貼上送出"
+            ? "已開啟 LINE 並填好詢價單，按送出即可；電腦版請貼上已複製的內容"
             : copied === "fail"
               ? "無法自動複製，請手動複製下方內容"
               : !linkOk
                 ? "請先貼上商品網址"
                 : !agreed
                   ? "請先勾選同意代購服務條款"
-                  : `會開啟 LINE（ID：${shop.lineId}）`}
+                  : `會開啟 LINE 官方帳號（${shop.lineId}）`}
         </p>
         {copied && (
           <textarea

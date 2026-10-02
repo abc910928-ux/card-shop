@@ -33,6 +33,7 @@ export async function toView(entry: ProductEntry): Promise<ProductView> {
     price: d.price,
     originalPrice: d.originalPrice,
     stock: d.stock,
+    preorder: d.preorder,
     myshipUrl: d.myshipUrl || undefined,
     addedAt: d.addedAt.toISOString().slice(0, 10),
     featured: d.featured,

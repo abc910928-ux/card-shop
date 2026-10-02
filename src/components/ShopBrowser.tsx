@@ -13,6 +13,13 @@ const SORTS: { id: Sort; label: string }[] = [
 
 const ALL = "全部";
 
+type Supply = "all" | "stock" | "preorder";
+const SUPPLY: { id: Supply; label: string }[] = [
+  { id: "all", label: "全部" },
+  { id: "stock", label: "現貨" },
+  { id: "preorder", label: "預購" },
+];
+
 type Filters = {
   q: string;
   category: string;
@@ -22,6 +29,7 @@ type Filters = {
   condition: string[];
   language: string[];
   inStock: boolean;
+  supply: Supply;
   sort: Sort;
 };
 
@@ -34,6 +42,7 @@ const EMPTY: Filters = {
   condition: [],
   language: [],
   inStock: false,
+  supply: "all",
   sort: "new",
 };
 
@@ -51,12 +60,17 @@ function fromQuery(search: string): Filters {
     condition: list("condition"),
     language: list("language"),
     inStock: sp.get("instock") === "1",
+    supply: (SUPPLY.find((x) => x.id === sp.get("supply"))?.id ?? "all") as Supply,
     sort: sort && SORTS.some((s) => s.id === sort) ? sort : "new",
   };
 }
 
-function toQuery(f: Filters): string {
-  const sp = new URLSearchParams();
+// 篩選用到的參數；其他參數（例如 LINE 登入導回時帶的 code、liff.state）原封保留
+const MANAGED = ["q", "category", "game", "set", "rarity", "condition", "language", "instock", "supply", "sort"];
+
+function toQuery(f: Filters, current: string): string {
+  const sp = new URLSearchParams(current);
+  MANAGED.forEach((k) => sp.delete(k));
   if (f.q) sp.set("q", f.q);
   if (f.category !== ALL) sp.set("category", f.category);
   if (f.game !== ALL) sp.set("game", f.game);
@@ -65,6 +79,7 @@ function toQuery(f: Filters): string {
   if (f.condition.length) sp.set("condition", f.condition.join(","));
   if (f.language.length) sp.set("language", f.language.join(","));
   if (f.inStock) sp.set("instock", "1");
+  if (f.supply !== "all") sp.set("supply", f.supply);
   if (f.sort !== "new") sp.set("sort", f.sort);
   const s = sp.toString();
   return s ? `?${s}` : "";
@@ -85,7 +100,7 @@ export default function ShopBrowser({ products }: { products: ProductView[] }) {
     setReady(true);
   }, []);
   useEffect(() => {
-    if (ready) history.replaceState(null, "", location.pathname + toQuery(f));
+    if (ready) history.replaceState(null, "", location.pathname + toQuery(f, location.search) + location.hash);
   }, [f, ready]);
 
   const set = (patch: Partial<Filters>) => setF((prev) => ({ ...prev, ...patch }));
@@ -118,6 +133,8 @@ export default function ShopBrowser({ products }: { products: ProductView[] }) {
       if (f.condition.length && !f.condition.includes(p.condition ?? "")) return false;
       if (f.language.length && !f.language.includes(p.language ?? "")) return false;
       if (f.inStock && p.stock === 0) return false;
+      if (f.supply === "stock" && p.preorder) return false;
+      if (f.supply === "preorder" && !p.preorder) return false;
       if (q) {
         const hay = [p.name, p.set, p.number, p.rarity, p.game].join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
@@ -143,10 +160,23 @@ export default function ShopBrowser({ products }: { products: ProductView[] }) {
     f.rarity.length +
     f.condition.length +
     f.language.length +
-    (f.inStock ? 1 : 0);
+    (f.inStock ? 1 : 0) +
+    (f.supply !== "all" ? 1 : 0);
+
+  const hasPreorder = products.some((p) => p.preorder);
 
   const panel = (
     <div class="space-y-6">
+      {hasPreorder && (
+        <Group title="供貨">
+          <Pills
+            options={SUPPLY.map((x) => x.label)}
+            value={SUPPLY.find((x) => x.id === f.supply)!.label}
+            onSelect={(label) => set({ supply: SUPPLY.find((x) => x.label === label)!.id })}
+          />
+        </Group>
+      )}
+
       <Group title="類別">
         <Pills
           options={[ALL, ...categories]}
@@ -272,7 +302,7 @@ export default function ShopBrowser({ products }: { products: ProductView[] }) {
         {results.length > 0 ? (
           <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-4">
             {results.map((p) => (
-              <ProductCard key={p.id} p={p} />
+              <ProductCard key={p.id} p={p} wish />
             ))}
           </div>
         ) : (

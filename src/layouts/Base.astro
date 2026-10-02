@@ -9,8 +9,9 @@ import { url } from "../lib/url";
 interface Props {
   title?: string;
   description?: string;
+  noindex?: boolean; // 會員、管理頁不給搜尋引擎收錄
 }
-const { title, description = shop.description } = Astro.props;
+const { title, description = shop.description, noindex = false } = Astro.props;
 const fullTitle = title ? `${title}｜${shop.name}` : `${shop.name}｜${shop.tagline}`;
 ---
 
@@ -24,6 +25,7 @@ const fullTitle = title ? `${title}｜${shop.name}` : `${shop.name}｜${shop.tag
     <link rel="apple-touch-icon" href={url("/apple-touch-icon.png")} />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex" />}
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

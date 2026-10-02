@@ -19,7 +19,15 @@ const products = defineCollection({
       grade: z.object({ company: z.string(), score: z.string() }).optional(),
       price: z.number().int().positive(),
       originalPrice: z.number().int().positive().optional(),
-      stock: z.number().int().min(0),
+      stock: z.number().int().min(0), // 現貨：庫存；預購：剩餘可預購數量
+      // 有填就是預購商品（必須登入才能預購）
+      preorder: z
+        .object({
+          eta: z.string(), // 預計到貨，例："2026 年 11 月中"
+          deadline: z.string().optional(), // 預購截止，例："10/31"
+          limit: z.number().int().positive().optional(), // 每人限購
+        })
+        .optional(),
       images: z.array(image()).default([]),
       myshipUrl: z.string().optional(),
       addedAt: z.coerce.date(),

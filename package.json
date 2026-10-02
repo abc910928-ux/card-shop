@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@astrojs/preact": "^6.0.5",
+    "@line/liff": "^2.31.1",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.3.5",
     "preact": "^10.29.8",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
     "qrcode": "^1.5.4",
+    "supabase": "^2.119.0",
     "typescript": "^6.0.3"
   }
 }

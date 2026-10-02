@@ -12,10 +12,17 @@ import {
 } from "../lib/shipping";
 import { discountPercent, ntd, subline } from "../lib/format";
 import { copyAndOpenLine } from "../lib/line";
+import { login, useAuth } from "../lib/auth";
+import { useProfile } from "../lib/profile";
+import { api } from "../lib/api";
+import type { Recipient } from "../lib/orders";
 import type { ProductView } from "../lib/types";
 
-// 商品頁右側的下單面板：選寄送方式與保價，即時算出合計並導向下單管道
+// 商品頁右側的下單面板（現貨）：選寄送方式與保價，即時算出合計並導向下單管道。
+// 訪客也能下單；登入的人會自動帶入收件資料，並把訂單存進「我的訂單」。
 export default function OrderPanel({ p }: { p: ProductView }) {
+  const { enabled: authOn, user } = useAuth();
+  const profile = useProfile();
   const soldOut = p.stock === 0;
   const methods = methodsFor(p);
   const [qty, setQty] = useState(1);
@@ -24,6 +31,8 @@ export default function OrderPanel({ p }: { p: ProductView }) {
   const [wantIns, setWantIns] = useState(false);
   const [declared, setDeclared] = useState<number | undefined>(undefined); // undefined = 依商品金額自動選級距
   const [copied, setCopied] = useState<"" | "ok" | "fail">("");
+  const [sending, setSending] = useState(false);
+  const [saved, setSaved] = useState<{ code?: string; error?: string } | null>(null);
 
   const anyAvailable = methods.some((m) => availability(m, goods).ok);
   // 數量變動後若原本的方式超過上限，自動換成可用的
@@ -35,33 +44,70 @@ export default function OrderPanel({ p }: { p: ProductView }) {
   const c = method.coverage;
   const off = discountPercent(p);
 
-  const orderText = useMemo(() => {
+  // 收件資料：登入的人從會員資料帶入，沒有的欄位留空讓買家在 LINE 補上
+  const recipient: Recipient =
+    method.id === "tcat"
+      ? { name: profile?.realName ?? undefined, phone: profile?.phone ?? undefined, address: profile?.address ?? undefined }
+      : { name: profile?.realName ?? undefined, phone: profile?.phone ?? undefined, store: profile?.storeName ?? undefined };
+
+  const buildText = (code?: string) => {
     const item = [subline(p), p.name, p.rarity, p.grade && `${p.grade.company} ${p.grade.score}`]
       .filter(Boolean)
       .join(" ");
-    const lines = [
-      `【${shop.name} 訂單】`,
+    const lines = [`【${shop.name} 訂單】`];
+    if (code) lines.push(`訂單編號：${code}`);
+    lines.push(
       `商品：${item}`,
       `商品編號：${p.id}`,
       `單價：${ntd(p.price)} × ${qty}`,
       `寄送：${method.short}（運費 ${ntd(q.shippingFee)}）`,
-    ];
+    );
     if (c.kind === "tiers") lines.push(`申報價值：${ntd(q.declaredValue)}`);
     if (c.kind === "rate")
       lines.push(
         q.insured ? `加保：是（報值 ${ntd(q.declaredValue)}，保價費 ${ntd(q.insuranceFee)}）` : "加保：否",
       );
     lines.push(`合計：${ntd(q.total)}`, "");
-    lines.push(
-      method.id === "tcat"
-        ? "收件人姓名：\n電話：\n地址："
-        : "取貨門市（店名或店號）：\n收件人姓名：\n電話：",
-    );
+    if (method.id === "tcat") {
+      lines.push(`收件人姓名：${recipient.name ?? ""}`, `電話：${recipient.phone ?? ""}`, `地址：${recipient.address ?? ""}`);
+    } else {
+      lines.push(
+        `取貨門市（店名或店號）：${recipient.store ?? ""}`,
+        `收件人姓名：${recipient.name ?? ""}`,
+        `電話：${recipient.phone ?? ""}`,
+      );
+    }
     return lines.join("\n");
-  }, [p, qty, method, q, c.kind]);
+  };
+  const orderText = useMemo(() => buildText(saved?.code), [p, qty, method, q, c.kind, profile, saved]);
 
   async function orderByLine() {
-    setCopied((await copyAndOpenLine(orderText)) ? "ok" : "fail");
+    setSending(true);
+    let code: string | undefined;
+    if (user) {
+      // 已登入：先存進資料庫拿訂單編號；儲存失敗也照樣用 LINE 下單
+      try {
+        const o = await api.createOrder({
+          kind: "stock",
+          items: [{ productId: p.id, name: p.name, price: p.price, qty }],
+          shipping: {
+            method: method.id,
+            label: method.short,
+            fee: q.shippingFee,
+            declaredValue: q.declaredValue || undefined,
+            insured: q.insured,
+            insuranceFee: q.insuranceFee || undefined,
+          },
+          recipient,
+        });
+        code = o.code;
+        setSaved({ code });
+      } catch (e) {
+        setSaved({ error: e instanceof Error ? e.message : "訂單紀錄儲存失敗" });
+      }
+    }
+    setCopied((await copyAndOpenLine(buildText(code))) ? "ok" : "fail");
+    setSending(false);
   }
 
   return (
@@ -88,25 +134,7 @@ export default function OrderPanel({ p }: { p: ProductView }) {
           {p.stock > 1 && (
             <div class="mt-5 flex items-center justify-between">
               <span class="text-sm text-muted">數量</span>
-              <div class="flex items-center rounded-lg border border-line">
-                <button
-                  class="px-3 py-1.5 text-lg leading-none disabled:opacity-30"
-                  disabled={qty <= 1}
-                  onClick={() => setQty(qty - 1)}
-                  aria-label="減少"
-                >
-                  −
-                </button>
-                <span class="w-8 text-center text-sm">{qty}</span>
-                <button
-                  class="px-3 py-1.5 text-lg leading-none disabled:opacity-30"
-                  disabled={qty >= p.stock}
-                  onClick={() => setQty(qty + 1)}
-                  aria-label="增加"
-                >
-                  +
-                </button>
-              </div>
+              <Stepper value={qty} max={p.stock} onChange={setQty} />
             </div>
           )}
 
@@ -278,21 +306,33 @@ export default function OrderPanel({ p }: { p: ProductView }) {
           <>
             <button
               onClick={orderByLine}
-              class="w-full rounded-xl bg-accent py-3.5 font-bold text-accent-ink transition hover:brightness-95"
+              disabled={sending}
+              class="w-full rounded-xl bg-accent py-3.5 font-bold text-accent-ink transition hover:brightness-95 disabled:opacity-60"
             >
-              複製訂單並用 LINE 下單
+              {sending ? "處理中…" : "用 LINE 送出訂單"}
             </button>
             <p class="text-center text-xs text-muted">
               {copied === "ok"
-                ? "已複製訂單內容，請在 LINE 對話中貼上送出"
+                ? saved?.code
+                  ? `已建立訂單 ${saved.code}，請在 LINE 按送出；電腦版請貼上已複製的內容`
+                  : "已開啟 LINE 並填好訂單，按送出即可；電腦版請貼上已複製的內容"
                 : copied === "fail"
                   ? "無法自動複製，請手動複製下方訂單內容"
-                  : `會開啟 LINE（ID：${shop.lineId}），貼上訂單即可，確認後轉帳出貨`}
+                  : `會開啟 LINE 官方帳號（${shop.lineId}）並自動填好訂單，確認後轉帳出貨`}
             </p>
+            {saved?.error && <p class="text-center text-xs text-sale">訂單紀錄未儲存（{saved.error}），仍可用 LINE 下單</p>}
+            {authOn && !user && (
+              <p class="text-center text-xs text-muted">
+                <button onClick={() => login()} class="underline underline-offset-2 hover:text-ink">
+                  LINE 登入
+                </button>
+                後會自動帶入收件資料，並保存訂單紀錄
+              </p>
+            )}
             {copied && (
               <textarea
                 readOnly
-                rows={9}
+                rows={10}
                 value={orderText}
                 class="w-full rounded-lg border border-line bg-bg p-3 text-xs"
                 onFocus={(e) => (e.target as HTMLTextAreaElement).select()}
@@ -301,6 +341,30 @@ export default function OrderPanel({ p }: { p: ProductView }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+export function Stepper({ value, max, onChange }: { value: number; max: number; onChange: (n: number) => void }) {
+  return (
+    <div class="flex items-center rounded-lg border border-line">
+      <button
+        class="px-3 py-1.5 text-lg leading-none disabled:opacity-30"
+        disabled={value <= 1}
+        onClick={() => onChange(value - 1)}
+        aria-label="減少"
+      >
+        −
+      </button>
+      <span class="w-8 text-center text-sm">{value}</span>
+      <button
+        class="px-3 py-1.5 text-lg leading-none disabled:opacity-30"
+        disabled={value >= max}
+        onClick={() => onChange(value + 1)}
+        aria-label="增加"
+      >
+        +
+      </button>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 ---
 import { shop } from "../config/shop";
+import AuthButton from "./AuthButton";
 import { categories } from "../lib/types";
 import { url } from "../lib/url";
 
@@ -48,10 +49,11 @@ const nav = [
         href={shop.lineUrl}
         target="_blank"
         rel="noopener"
-        class="rounded-full bg-[#06c755] px-3 py-1.5 text-xs font-bold text-white hover:brightness-110"
+        class="shrink-0 whitespace-nowrap rounded-full bg-[#06c755] px-3 py-1.5 text-xs font-bold text-white hover:brightness-110"
       >
         LINE 詢問
       </a>
+      <AuthButton client:load />
     </div>
   </div>
 
