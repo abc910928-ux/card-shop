@@ -43,7 +43,7 @@ export default function PreorderPanel({ p }: { p: ProductView }) {
         <Info label="預計到貨" value={pre.eta ?? "到貨後通知"} />
         {pre.deadline && <Info label="預購截止" value={pre.deadline} />}
         {pre.limit && <Info label="每人限購" value={`${pre.limit} 個`} />}
-        <Info label="剩餘名額" value={full ? "預購額滿" : `${stock} 個`} />
+        <Info label="庫存" value={full ? "已額滿" : `${stock} ${p.unit ?? "個"}`} />
       </dl>
 
       {variants.length > 0 && (
