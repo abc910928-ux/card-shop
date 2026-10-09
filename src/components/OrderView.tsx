@@ -354,6 +354,7 @@ function PaymentCard({
               <Line label="銀行">{`${b.name}${b.code ? `（${b.code}）` : ""}`}</Line>
               <Line label="帳號">
                 <span class="font-display font-bold tracking-wide">{b.account}</span>
+                <CopyButton text={b.account} />
               </Line>
               {b.holder && <Line label="戶名">{b.holder}</Line>}
               <Line label="金額">
@@ -474,6 +475,25 @@ function Lookup({
         </div>
       )}
     </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        } catch {}
+      }}
+      class="ml-2 rounded border border-line px-1.5 py-px text-[11px] text-muted hover:border-ink hover:text-ink"
+    >
+      {done ? "已複製" : "複製"}
+    </button>
   );
 }
 
