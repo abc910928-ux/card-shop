@@ -257,7 +257,7 @@ function arrivalMessage(o: Row): string {
     "【TCG代購】你預購的商品到貨了！",
     items,
     "",
-    `請在 ${due.getUTCMonth() + 1}/${due.getUTCDate()} 前轉帳 ${ntd(o.total)}（含運費）。`,
+    `請在 ${due.getUTCMonth() + 1}/${due.getUTCDate()} 前轉帳 ${ntd(dueOf(o))}${sum(o.receipts) > 0 ? `（已扣除已付的 ${ntd(sum(o.receipts))}）` : "（含運費）"}。`,
     "匯款帳號與回報匯款請到訂單頁：",
     `${SITE_URL}/order/?code=${o.code}`,
   ].join("\n");
@@ -306,6 +306,8 @@ const orderOut = (r: Row) => ({
   payment: r.payment ?? null,
   recipient: r.recipient,
   total: r.total,
+  adjustments: r.adjustments ?? [],
+  receipts: r.receipts ?? [],
   status: r.status,
   note: r.note,
   tracking: r.tracking,
@@ -349,6 +351,16 @@ function newCode(): string {
   const rand = Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[b % 32]).join("");
   return `TC-${d.slice(2, 4)}${d.slice(5, 7)}${d.slice(8, 10)}-${rand}`;
 }
+
+// ─── 金額：調整（折扣、補差價）與收款（訂金、預付）──
+// total = 商品＋運費＋保價＋付款手續費＋所有調整；尚需付款 = total − 已收款
+const sum = (list: Row[] | null | undefined) => (list ?? []).reduce((s: number, x: Row) => s + (x.amount ?? 0), 0);
+function baseTotal(o: Row): number {
+  const goods = (o.items ?? []).reduce((s: number, i: Row) => s + i.price * i.qty, 0);
+  const ship = o.shipping ? o.shipping.fee + (o.shipping.insuranceFee ?? 0) : 0;
+  return goods + ship + (o.payment?.fee ?? 0);
+}
+const dueOf = (o: Row) => Math.max(0, o.total - sum(o.receipts));
 
 const historyEntry = (status: string, by: "buyer" | "admin" | "system", note?: string | null) => ({
   status,
@@ -481,6 +493,30 @@ async function handle(req: Request): Promise<unknown> {
       }
       if (body.note !== undefined) patch.note = str(body.note, 300);
       if (body.tracking !== undefined) patch.tracking = str(body.tracking, 60);
+      // 調整金額／記錄收款（新增或刪除一筆）
+      const entry = (b: Row, min: number) => ({
+        amount: int(b.amount, min, 1000000),
+        note: str(b.note, 60),
+        at: new Date().toISOString(),
+      });
+      const oldAdj: Row[] = o.adjustments ?? [];
+      const oldRec: Row[] = o.receipts ?? [];
+      let adjustments = oldAdj;
+      let receipts = oldRec;
+      if (body.addAdjustment) {
+        const e = entry(body.addAdjustment, -1000000);
+        if (e.amount === 0) throw new HttpError(400, "金額不能是 0");
+        adjustments = [...adjustments, e];
+      }
+      if (typeof body.removeAdjustment === "number") adjustments = adjustments.filter((_, i) => i !== body.removeAdjustment);
+      if (body.addReceipt) receipts = [...receipts, entry(body.addReceipt, 1)];
+      if (typeof body.removeReceipt === "number") receipts = receipts.filter((_, i) => i !== body.removeReceipt);
+      if (adjustments !== oldAdj) {
+        patch.adjustments = adjustments;
+        patch.total = baseTotal(o) + sum(adjustments);
+        if (patch.total < 0) throw new HttpError(400, "調整後金額不能小於 0");
+      }
+      if (receipts !== oldRec) patch.receipts = receipts;
       if (Object.keys(patch).length === 0) return orderOut(o);
       const row = check(await db.from("orders").update(patch).eq("id", id).select("*, profiles(display_name, real_name, phone)").single());
       stockCache = null;
@@ -659,7 +695,7 @@ async function reportPayment(o: Row, last5: unknown, buyer: string) {
       .select()
       .single(),
   );
-  await notifyShop(`💰 ${o.code} 回報已匯款\n買家：${buyer}\n金額：${ntd(o.total)}\n帳號末五碼：${last5}\n${SITE_URL}/admin/`);
+  await notifyShop(`💰 ${o.code} 回報已匯款\n買家：${buyer}\n應付：${ntd(dueOf(o))}\n帳號末五碼：${last5}\n${SITE_URL}/admin/`);
   return orderOut(row);
 }
 

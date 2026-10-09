@@ -15,6 +15,8 @@ import {
   itemLabel,
   kindLabel,
   PAY_DEADLINE_DAYS,
+  dueOf,
+  paidOf,
   payDeadline,
   statusTone,
   type Order,
@@ -239,10 +241,27 @@ function Detail({
                 {o.shipping && <Line label="運費">{ntd(o.shipping.fee)}</Line>}
                 {!!o.shipping?.insuranceFee && <Line label="保價費">{ntd(o.shipping.insuranceFee)}</Line>}
                 {!!o.payment?.fee && <Line label="付款手續費">{ntd(o.payment.fee)}</Line>}
+                {(o.adjustments ?? []).map((a) => (
+                  <Line label={a.note || (a.amount < 0 ? "折扣" : "加價")}>
+                    {a.amount < 0 ? `−${ntd(-a.amount)}` : `+${ntd(a.amount)}`}
+                  </Line>
+                ))}
                 <div class="flex justify-between pt-1 font-bold">
                   <dt>合計</dt>
                   <dd class="font-display text-lg">{ntd(o.total)}</dd>
                 </div>
+                {(o.receipts ?? []).map((r) => (
+                  <Line label="已付">
+                    <span class="text-ok">−{ntd(r.amount)}</span>
+                    {r.note && <span class="ml-1 text-xs text-muted">（{r.note}）</span>}
+                  </Line>
+                ))}
+                {paidOf(o) > 0 && (
+                  <div class="flex justify-between font-bold">
+                    <dt>尚需付款</dt>
+                    <dd class="font-display text-lg">{dueOf(o) === 0 ? "已付清" : ntd(dueOf(o))}</dd>
+                  </div>
+                )}
               </dl>
             )}
           </Card>
@@ -309,12 +328,14 @@ function PaymentCard({
     return (
       <Card title="付款：取貨付款">
         <p class="text-sm text-ink-soft">
-          {o.status === "completed" ? "已取貨付款，謝謝！" : `取貨時付現 ${ntd(o.total)}，不用先轉帳。`}
+          {o.status === "completed" ? "已取貨付款，謝謝！" : `取貨時付現 ${ntd(dueOf(o))}，不用先轉帳。`}
         </p>
       </Card>
     );
 
   const paid = ["paid", "shipped", "completed"].includes(o.status);
+  const due = dueOf(o);
+  const prepaid = paidOf(o);
   const confirmedAt = [...o.history].reverse().find((h) => h.status === "confirmed")?.at;
   const deadline =
     o.kind === "preorder"
@@ -341,9 +362,12 @@ function PaymentCard({
     <Card title="付款：銀行轉帳">
       {paid ? (
         <p class="text-sm text-ok">已確認收款，謝謝！</p>
+      ) : due === 0 ? (
+        <p class="text-sm text-ok">已付清，謝謝！</p>
       ) : waitingArrival ? (
         <p class="text-sm text-ink-soft">
-          預購不收訂金，請先不用轉帳。商品到貨後會用 LINE 與這頁通知你，請在 {PAY_DEADLINE_DAYS} 天內轉帳 <b>{ntd(o.total)}</b>（含運費）。
+          預購不收訂金，請先不用轉帳。商品到貨後會用 LINE 與這頁通知你，請在 {PAY_DEADLINE_DAYS} 天內轉帳 <b>{ntd(due)}</b>
+          {prepaid > 0 ? `（已扣除你先付的 ${ntd(prepaid)}）` : "（含運費）"}。
         </p>
       ) : o.status === "pending" ? (
         <p class="text-sm text-ink-soft">店家確認訂單（確認庫存）後，這裡會顯示匯款帳號，請先不用轉帳。</p>
@@ -358,7 +382,7 @@ function PaymentCard({
               </Line>
               {b.holder && <Line label="戶名">{b.holder}</Line>}
               <Line label="金額">
-                <span class="font-bold">{ntd(o.total)}</span>
+                <span class="font-bold">{ntd(due)}</span>
               </Line>
             </dl>
           ) : (
@@ -367,7 +391,7 @@ function PaymentCard({
               <a href={oaMessageUrl(`訂單 ${o.code} 想索取匯款帳號`)} target="_blank" rel="noopener" class="mx-0.5 underline">
                 LINE 詢問
               </a>
-              匯款帳號，金額 <b>{ntd(o.total)}</b>。
+              匯款帳號，金額 <b>{ntd(due)}</b>。
             </p>
           )}
           {deadline && <p class="text-xs text-muted">請在 {deadline.toLocaleDateString("zh-TW")} 前完成轉帳。</p>}

@@ -45,7 +45,16 @@ async function call<T>(
   return data as T;
 }
 
-export type OrderPatch = { status?: OrderStatus; note?: string; tracking?: string; reason?: string };
+export type OrderPatch = {
+  status?: OrderStatus;
+  note?: string;
+  tracking?: string;
+  reason?: string;
+  addAdjustment?: { amount: number; note: string };
+  removeAdjustment?: number;
+  addReceipt?: { amount: number; note: string };
+  removeReceipt?: number;
+};
 
 export const api = {
   /** 各商品目前剩餘數量（公開） */

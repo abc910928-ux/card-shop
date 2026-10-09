@@ -9,6 +9,8 @@ import { refreshStock } from "../lib/stock";
 import {
   BUYER_CANCELLABLE,
   buyerStatus,
+  dueOf,
+  paidOf,
   isOverdue,
   itemLabel,
   kindLabel,
@@ -244,7 +246,16 @@ function OrderList() {
                   ? "等待報價"
                   : "到貨後選寄送方式"}
             </span>
-            {o.total > 0 && <span class="font-display font-bold">{ntd(o.total)}</span>}
+            {o.total > 0 && (
+              <span class="font-display font-bold">
+                {ntd(o.total)}
+                {paidOf(o) > 0 && (
+                  <span class="ml-1.5 text-xs font-normal text-muted">
+                    {dueOf(o) === 0 ? "已付清" : `尚需 ${ntd(dueOf(o))}`}
+                  </span>
+                )}
+              </span>
+            )}
           </div>
           {o.status === "arrived" && o.arrivedAt && (
             <p class={`mt-2 rounded-lg p-2 text-xs ${isOverdue(o) ? "bg-sale/10 text-sale" : "bg-accent/15"}`}>

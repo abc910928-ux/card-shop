@@ -85,7 +85,9 @@ export type Order = {
   shipping: Shipping | null;
   payment: Payment | null;
   recipient: Recipient | null;
-  total: number;
+  total: number; // 已含金額調整
+  adjustments?: MoneyEntry[]; // 金額調整（正數加價、負數折扣）
+  receipts?: MoneyEntry[]; // 已收款（訂金、預付）
   status: OrderStatus;
   note: string | null;
   tracking: string | null;
@@ -98,6 +100,14 @@ export type Order = {
   // 管理頁才有
   member?: { displayName: string; realName: string | null; phone: string | null };
 };
+
+export type MoneyEntry = { amount: number; note: string | null; at: string };
+
+const sumOf = (list?: MoneyEntry[]) => (list ?? []).reduce((s, x) => s + x.amount, 0);
+/** 已收款合計 */
+export const paidOf = (o: Pick<Order, "receipts">) => sumOf(o.receipts);
+/** 尚需付款 */
+export const dueOf = (o: Pick<Order, "total" | "receipts">) => Math.max(0, o.total - paidOf(o));
 
 export type HistoryEntry = { status: OrderStatus; at: string; by: "buyer" | "admin" | "system"; note?: string };
 

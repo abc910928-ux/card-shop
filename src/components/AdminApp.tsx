@@ -9,8 +9,10 @@ import {
   CANCELLED,
   HOLD_HOURS,
   STAGES,
+  dueOf,
   isOverdue,
   itemLabel,
+  paidOf,
   kindLabel,
   nextStep,
   payDeadline,
@@ -95,6 +97,7 @@ function Orders({ onToast }: { onToast: (s: string) => void }) {
   const [error, setError] = useState("");
   const [cancelling, setCancelling] = useState<Order | null>(null);
   const [shipping, setShipping] = useState<Order | null>(null);
+  const [amountFor, setAmountFor] = useState<Order | null>(null);
 
   const load = () =>
     api.admin
@@ -215,6 +218,11 @@ function Orders({ onToast }: { onToast: (s: string) => void }) {
               onRestore={(to) => update(o, { status: to, reason: "復原訂單" }, `${o.code} 已復原`)}
               onRevert={(to) => update(o, { status: to, reason: "退回上一步" }, `${o.code} 已退回「${statusLabel[to]}」`)}
               onNote={(note) => update(o, { note }, "備註已儲存")}
+              onAmount={() => setAmountFor(o)}
+              onRemoveEntry={(kind, i) =>
+                confirm(kind === "adj" ? "刪除這筆金額調整？" : "刪除這筆收款紀錄？") &&
+                update(o, kind === "adj" ? { removeAdjustment: i } : { removeReceipt: i }, "已刪除")
+              }
             />
           ))}
         </ul>
@@ -231,6 +239,16 @@ function Orders({ onToast }: { onToast: (s: string) => void }) {
               `${cancelling.code} 已改為「${statusLabel[status]}」，庫存已放回`,
             );
             if (ok) setCancelling(null);
+          }}
+        />
+      )}
+      {amountFor && (
+        <AmountDialog
+          o={amountFor}
+          onClose={() => setAmountFor(null)}
+          onConfirm={async (patch, message) => {
+            const ok = await update(amountFor, patch, `${amountFor.code} ${message}`);
+            if (ok) setAmountFor(null);
           }}
         />
       )}
@@ -255,6 +273,8 @@ function OrderCard({
   onRestore,
   onRevert,
   onNote,
+  onAmount,
+  onRemoveEntry,
 }: {
   o: Order;
   onNext: (to: OrderStatus, label: string) => void;
@@ -262,6 +282,8 @@ function OrderCard({
   onRestore: (to: OrderStatus) => void;
   onRevert: (to: OrderStatus) => void;
   onNote: (note: string) => void;
+  onAmount: () => void;
+  onRemoveEntry: (kind: "adj" | "rec", index: number) => void;
 }) {
   const [note, setNote] = useState(o.note ?? "");
   const [open, setOpen] = useState(false);
@@ -353,10 +375,37 @@ function OrderCard({
               {o.payment.fee > 0 && <span>{ntd(o.payment.fee)}</span>}
             </li>
           )}
+          {(o.adjustments ?? []).map((a, i) => (
+            <li class="flex justify-between text-ink-soft">
+              <span>
+                {a.note || (a.amount < 0 ? "折扣" : "加價")}
+                <RemoveBtn onClick={() => onRemoveEntry("adj", i)} />
+              </span>
+              <span>{a.amount < 0 ? `−${ntd(-a.amount)}` : `+${ntd(a.amount)}`}</span>
+            </li>
+          ))}
           {o.total > 0 && (
             <li class="flex justify-between font-bold">
               <span>合計</span>
               <span class="font-display">{ntd(o.total)}</span>
+            </li>
+          )}
+          {(o.receipts ?? []).map((r, i) => (
+            <li class="flex justify-between text-emerald-700">
+              <span>
+                已收{r.note ? `：${r.note}` : ""}
+                <span class="ml-1 text-xs text-muted">{new Date(r.at).toLocaleDateString("zh-TW")}</span>
+                <RemoveBtn onClick={() => onRemoveEntry("rec", i)} />
+              </span>
+              <span>−{ntd(r.amount)}</span>
+            </li>
+          ))}
+          {paidOf(o) > 0 && (
+            <li class="flex justify-between font-bold">
+              <span>尚需付款</span>
+              <span class={`font-display ${dueOf(o) === 0 ? "text-ok" : "text-sale"}`}>
+                {dueOf(o) === 0 ? "已付清" : ntd(dueOf(o))}
+              </span>
             </li>
           )}
         </ul>
@@ -398,6 +447,11 @@ function OrderCard({
             class="text-xs text-muted underline underline-offset-2 hover:text-ink"
           >
             按錯了？退回上一步
+          </button>
+        )}
+        {o.kind !== "proxy" && !cancelled && (
+          <button onClick={onAmount} class="rounded-lg border border-line px-3 py-2 text-sm hover:border-ink">
+            金額／收款
           </button>
         )}
         <button onClick={() => setOpen(!open)} class="ml-auto text-xs text-muted underline underline-offset-2 hover:text-ink">
@@ -492,6 +546,140 @@ function CancelDialog({
           class="rounded-lg bg-sale px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
         >
           確定取消
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
+function RemoveBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} class="ml-1.5 text-xs text-muted hover:text-sale" aria-label="刪除">
+      ✕
+    </button>
+  );
+}
+
+// 記錄收款（訂金、預付）或調整訂單金額（折扣、補差價）
+function AmountDialog({
+  o,
+  onClose,
+  onConfirm,
+}: {
+  o: Order;
+  onClose: () => void;
+  onConfirm: (patch: OrderPatch, message: string) => void;
+}) {
+  const [mode, setMode] = useState<"rec" | "adj">("rec");
+  const [sign, setSign] = useState<1 | -1>(-1);
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const n = Math.floor(Number(amount)) || 0;
+  const presets = mode === "rec" ? ["訂金", "預付全額", "補款"] : sign === -1 ? ["折扣", "老客優惠"] : ["補差價", "運費調整"];
+  const total = mode === "adj" ? o.total + sign * n : o.total;
+  const paid = paidOf(o) + (mode === "rec" ? n : 0);
+  const valid = n > 0 && !!note.trim() && total >= 0;
+  return (
+    <Dialog title={`金額／收款 ${o.code}`} onClose={onClose}>
+      <div class="flex gap-2">
+        {([
+          ["rec", "記錄收款"],
+          ["adj", "調整金額"],
+        ] as const).map(([m, label]) => (
+          <button
+            onClick={() => {
+              setMode(m);
+              setNote("");
+            }}
+            class={"flex-1 rounded-lg border py-2 text-sm " + (mode === m ? "border-ink bg-ink text-white" : "border-line")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p class="mt-2 text-xs text-muted">
+        {mode === "rec"
+          ? "買家先付的訂金或預付款記在這裡，訂單頁與到貨通知會改顯示「尚需付款」。"
+          : "折扣、補差價、改運費等。合計會跟著變，買家在訂單頁看得到原因。"}
+      </p>
+      {mode === "adj" && (
+        <div class="mt-3 flex gap-2">
+          {([
+            [-1, "減少（折扣）"],
+            [1, "增加（加價）"],
+          ] as const).map(([d, label]) => (
+            <button
+              onClick={() => {
+                setSign(d);
+                setNote("");
+              }}
+              class={"flex-1 rounded-lg border py-1.5 text-sm " + (sign === d ? "border-ink" : "border-line text-muted")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      <label class="mt-3 block text-sm">
+        <span class="mb-1.5 block font-medium">金額（NT$）</span>
+        <input
+          type="number"
+          min={1}
+          inputMode="numeric"
+          value={amount}
+          onInput={(e) => setAmount((e.target as HTMLInputElement).value)}
+          class="w-full rounded-lg border border-line px-3 py-2 text-sm"
+        />
+      </label>
+      <div class="mt-3 flex flex-wrap gap-1.5">
+        {presets.map((p) => (
+          <button
+            onClick={() => setNote(p)}
+            class={"rounded-full border px-3 py-1 text-xs " + (note === p ? "border-ink" : "border-line text-muted")}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+      <input
+        value={note}
+        onInput={(e) => setNote((e.target as HTMLInputElement).value)}
+        placeholder="說明（買家看得到）"
+        class="mt-2 w-full rounded-lg border border-line px-3 py-2 text-sm"
+      />
+      <dl class="mt-3 space-y-1 rounded-lg bg-bg p-3 text-sm">
+        <div class="flex justify-between">
+          <dt class="text-muted">合計</dt>
+          <dd>{ntd(Math.max(0, total))}</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-muted">已收</dt>
+          <dd>{ntd(paid)}</dd>
+        </div>
+        <div class="flex justify-between font-bold">
+          <dt>尚需付款</dt>
+          <dd>{ntd(Math.max(0, total - paid))}</dd>
+        </div>
+      </dl>
+      <div class="mt-5 flex justify-end gap-2">
+        <button onClick={onClose} class="rounded-lg px-4 py-2 text-sm text-muted hover:text-ink">
+          取消
+        </button>
+        <button
+          disabled={!valid || busy}
+          onClick={async () => {
+            setBusy(true);
+            const e = { amount: mode === "adj" ? sign * n : n, note: note.trim() };
+            await onConfirm(
+              mode === "rec" ? { addReceipt: e } : { addAdjustment: e },
+              mode === "rec" ? `已記錄收款 ${ntd(n)}` : `金額已調整為 ${ntd(total)}`,
+            );
+            setBusy(false);
+          }}
+          class="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+        >
+          確認
         </button>
       </div>
     </Dialog>

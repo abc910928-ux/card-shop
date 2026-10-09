@@ -1,6 +1,6 @@
 // 本機開發用的假後端（PUBLIC_AUTH_MOCK=1）：資料存在 localStorage，行為模仿 Edge Function。
 // 正式建置不會用到這個檔案。
-import { ApiError } from "./api";
+import { ApiError, type OrderPatch } from "./api";
 import { url } from "./url";
 import { skuOf, skusOf, type ProductJson } from "./sku";
 import { CANCELLED, HOLD_HOURS, type HistoryEntry, type Member, type NewOrder, type Order, type Profile, type WishItem } from "./orders";
@@ -238,6 +238,18 @@ export async function mockCall<T>(method: string, path: string, body?: unknown):
     }
     if (patch.note !== undefined) o.note = patch.note || null;
     if (patch.tracking !== undefined) o.tracking = patch.tracking || null;
+    const p2 = body as OrderPatch;
+    const entry = (e: { amount: number; note: string }) => ({ amount: e.amount, note: e.note || null, at: now() });
+    if (p2.addAdjustment || typeof p2.removeAdjustment === "number") {
+      let adj = o.adjustments ?? [];
+      if (p2.addAdjustment) adj = [...adj, entry(p2.addAdjustment)];
+      if (typeof p2.removeAdjustment === "number") adj = adj.filter((_, i) => i !== p2.removeAdjustment);
+      const base = o.items.reduce((s, i) => s + i.price * i.qty, 0) + (o.shipping ? o.shipping.fee + (o.shipping.insuranceFee ?? 0) : 0) + (o.payment?.fee ?? 0);
+      o.adjustments = adj;
+      o.total = base + adj.reduce((s, x) => s + x.amount, 0);
+    }
+    if (p2.addReceipt) o.receipts = [...(o.receipts ?? []), entry(p2.addReceipt)];
+    if (typeof p2.removeReceipt === "number") o.receipts = (o.receipts ?? []).filter((_, i) => i !== p2.removeReceipt);
     o.updatedAt = now();
     return done(out(o));
   }
