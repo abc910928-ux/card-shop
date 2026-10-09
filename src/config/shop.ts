@@ -20,6 +20,14 @@ export const shop = {
   lineUrl: "https://line.me/R/ti/p/%40195azlpr", // @ 依 LINE 規定要編碼成 %40
   lineQr: "line-qr.png", // 放在 public/
 
+  // 店家資訊（消保法第 18 條：經營者名稱、聯絡方式），顯示在頁尾與各條款
+  owner: {
+    name: "莊子洋",
+    phone: "0910-109-489",
+    email: "abc24679220@gmail.com",
+    city: "桃園市",
+  },
+
   // 會員功能（LINE 登入＋會員資料庫）。兩個都是公開值，沒設定時登入功能自動隱藏
   liffId: import.meta.env.PUBLIC_LIFF_ID ?? "",
   apiBase: import.meta.env.PUBLIC_API_BASE ?? "", // Supabase Edge Function 網址，例：https://xxxx.supabase.co/functions/v1/api

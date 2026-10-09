@@ -475,6 +475,15 @@ export default function CartApp({ products }: { products: ProductView[] }) {
               付款：{pay.label}・{preorder ? `商品到貨後會用 LINE 與訂單頁通知你，請在 ${PAY_DEADLINE_DAYS} 天內轉帳` : pay.note}
             </p>
           )}
+          {!preorder && (
+            <p class="mt-3 text-xs leading-relaxed text-ink-soft">
+              送出訂單即表示同意
+              <a href={url("/terms/shopping/")} target="_blank" class="mx-0.5 underline">
+                購物服務條款
+              </a>
+              。收到商品後 7 天內可不說明理由退貨（運費由本店負擔），退貨後 15 天內全額退款。
+            </p>
+          )}
           <button
             type="submit"
             disabled={busy || !pay || overStock || !anyShip || (preorder && (!agreed || !user || !!profile?.preorderBlocked))}
