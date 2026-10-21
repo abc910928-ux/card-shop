@@ -267,7 +267,7 @@ function OrderList() {
             <p class="mt-2 rounded-lg bg-accent/15 p-2 text-xs">訂單已確認，請到訂單頁查看匯款資訊。</p>
           )}
           {o.tracking && <p class="mt-2 text-sm">物流單號：<span class="font-medium">{o.tracking}</span></p>}
-          {o.note && <p class="mt-2 text-xs text-muted">店家備註：{o.note}</p>}
+          {o.note && <p class="mt-2 text-xs text-muted">備註：{o.note}</p>}
           <div class="mt-3 flex items-center justify-end gap-4 border-t border-line pt-2">
             {BUYER_CANCELLABLE.includes(o.status) && (
               <button onClick={() => cancel(o)} class="text-xs text-muted underline underline-offset-2 hover:text-sale">
