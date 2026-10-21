@@ -23,7 +23,6 @@ export const shop = {
   // 店家資訊（消保法第 18 條：經營者名稱、聯絡方式），顯示在頁尾與各條款
   owner: {
     name: "莊子洋",
-    phone: "0910-109-489",
     email: "abc24679220@gmail.com",
     city: "桃園市",
   },
