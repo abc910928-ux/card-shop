@@ -5,9 +5,8 @@ game: 航海王
 set: TC-02
 language: 日文
 price: 3200
-stock: 12              # 可預購名額
-payments: [transfer]   # 預購只收轉帳：到貨後通知付款
-preorder: { eta: 約 2–3 週 }   # 預購商品；eta 是預計到貨
+stock: 12              # 現貨數量（含之前預購已登記的）
+payments: [transfer]   # 只收銀行轉帳：下單後直接付款
 images: ["../../assets/products/tc-02-treasure-box.jpg"]
 addedAt: 2026-10-02
 featured: true

@@ -145,11 +145,11 @@ function Detail({
         <div class="rounded-2xl border border-ok/40 bg-ok/5 p-5">
           <div class="text-lg font-bold text-ok">訂單已送出！</div>
           <p class="mt-1 text-sm leading-relaxed text-ink-soft">
-            店家已收到通知，確認訂單後這頁的進度會更新
             {o.kind === "preorder"
-              ? "。預購不收訂金，商品到貨後會用 LINE 與這頁通知你轉帳"
-              : o.payment?.method === "transfer" && "，並顯示匯款資訊"}
-            。
+              ? "店家已收到通知，確認訂單後這頁的進度會更新。預購不收訂金，商品到貨後會用 LINE 與這頁通知你轉帳。"
+              : o.payment?.method === "transfer"
+                ? `請依下方匯款資訊在 ${shop.payDays} 天內轉帳，並回報帳號末五碼；確認入帳後就會出貨。`
+                : "店家已收到通知，確認訂單後這頁的進度會更新。"}
             {guest && (
               <>
                 {" "}
@@ -340,7 +340,7 @@ function PaymentCard({
   const deadline =
     o.kind === "preorder"
       ? o.arrivedAt && payDeadline(o.arrivedAt)
-      : confirmedAt && new Date(new Date(confirmedAt).getTime() + shop.payDays * 86400_000);
+      : new Date(new Date(confirmedAt ?? o.createdAt).getTime() + shop.payDays * 86400_000);
   const waitingArrival = o.kind === "preorder" && ["pending", "confirmed"].includes(o.status);
   const b = shop.bank;
 
@@ -369,8 +369,6 @@ function PaymentCard({
           預購不收訂金，請先不用轉帳。商品到貨後會用 LINE 與這頁通知你，請在 {PAY_DEADLINE_DAYS} 天內轉帳 <b>{ntd(due)}</b>
           {prepaid > 0 ? `（已扣除你先付的 ${ntd(prepaid)}）` : "（含運費）"}。
         </p>
-      ) : o.status === "pending" ? (
-        <p class="text-sm text-ink-soft">店家確認訂單（確認庫存）後，這裡會顯示匯款帳號，請先不用轉帳。</p>
       ) : (
         <div class="space-y-3 text-sm">
           {b.account ? (

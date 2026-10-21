@@ -64,7 +64,7 @@ export const paymentMethods: PaymentMethod[] = [
   {
     id: "transfer",
     label: "銀行轉帳",
-    note: `訂單確認後 ${shop.payDays} 天內轉帳，確認入帳後出貨`,
+    note: `下單後 ${shop.payDays} 天內轉帳，確認入帳後出貨`,
     fee: 0,
     shipping: ["711", "tcat"],
   },

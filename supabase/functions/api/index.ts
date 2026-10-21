@@ -133,7 +133,9 @@ const skuOf = (productId: string, variantId?: string | null) => (variantId ? `${
 function holdsStock(o: Row): boolean {
   if (o.kind === "proxy" || !ACTIVE.includes(o.status)) return false;
   if (o.kind === "stock" && o.status === "pending") {
-    return Date.now() - new Date(o.created_at).getTime() < HOLD_HOURS * 3600_000;
+    if (o.payment?.report) return true; // 買家已回報匯款
+    const hold = o.payment?.method === "transfer" ? PAY_DAYS * 86400_000 : HOLD_HOURS * 3600_000;
+    return Date.now() - new Date(o.created_at).getTime() < hold;
   }
   return true;
 }

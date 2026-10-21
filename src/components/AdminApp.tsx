@@ -7,7 +7,6 @@ import { ntd } from "../lib/format";
 import {
   CANCEL_REASONS,
   CANCELLED,
-  HOLD_HOURS,
   STAGES,
   dueOf,
   isOverdue,
@@ -309,7 +308,7 @@ function OrderCard({
             <span class="rounded bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">買家已回報匯款</span>
           )}
           {holdExpired && (
-            <span class="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">超過 {HOLD_HOURS} 小時未確認，庫存已釋出</span>
+            <span class="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">超過保留時間未付款或未確認，庫存已釋出</span>
           )}
           <span class="ml-auto text-xs text-muted">{new Date(o.createdAt).toLocaleString("zh-TW")}</span>
         </div>

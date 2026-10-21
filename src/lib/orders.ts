@@ -121,7 +121,7 @@ export type StockRow = {
   available: number;
 };
 
-/** 現貨「待確認」保留庫存的時數（與後端一致） */
+/** 現貨取貨付款「待確認」保留庫存的時數；轉帳訂單保留到付款期限（與後端一致） */
 export const HOLD_HOURS = 24;
 
 // ─── 訂單流程：依狀態決定下一步按鈕（參考蝦皮、Shopify 的後台） ───

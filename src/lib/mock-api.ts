@@ -81,7 +81,11 @@ function save(db: Db) {
 
 function holds(o: DbOrder): boolean {
   if (o.kind === "proxy" || CANCELLED.includes(o.status)) return false;
-  if (o.kind === "stock" && o.status === "pending") return Date.now() - o.createdMs < HOLD_HOURS * 3600_000;
+  if (o.kind === "stock" && o.status === "pending") {
+    if (o.payment?.report) return true;
+    const hold = o.payment?.method === "transfer" ? 3 * 86400_000 : HOLD_HOURS * 3600_000;
+    return Date.now() - o.createdMs < hold;
+  }
   return true;
 }
 const out = ({ lineUserId: _l, createdMs: _c, ...o }: DbOrder): Order => ({ ...o, holdsStock: holds({ ...o, lineUserId: null, createdMs: _c }) });
