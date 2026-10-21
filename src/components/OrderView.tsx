@@ -267,7 +267,7 @@ function Detail({
           </Card>
 
           {o.note && (
-            <Card title="店家備註">
+            <Card title="備註">
               <p class="text-sm text-ink-soft">{o.note}</p>
             </Card>
           )}
