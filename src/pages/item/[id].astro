@@ -8,7 +8,7 @@ import WishlistButton from "../../components/WishlistButton";
 import { ProductCard } from "../../components/ProductCard";
 import { getProducts, toView, type ProductEntry } from "../../lib/catalog";
 import { subline } from "../../lib/format";
-import { shop } from "../../config/shop";
+import { paymentMethods, shop } from "../../config/shop";
 import { url } from "../../lib/url";
 
 export async function getStaticPaths() {
@@ -23,6 +23,9 @@ interface Props {
 const { entry, products } = Astro.props;
 const p = await toView(entry);
 const { Content } = await render(entry);
+
+// 這件商品接受的付款方式（購買須知用）
+const payLabels = paymentMethods.filter((m) => p.payments.includes(m.id)).map((m) => m.label).join("或");
 
 // 規格表：有填才顯示
 const specs = [
@@ -98,7 +101,7 @@ const related = await Promise.all(
                   預購需登入 LINE，不收訂金；到貨通知後 3 天內付款，詳見<a href={url("/terms/preorder/")} class="underline">預購服務條款</a>。
                 </li>
               ) : (
-                <li>在網站結帳：選寄送方式（7-11 交貨便或黑貓宅配）與付款方式（銀行轉帳或取貨付款），送出後可在訂單頁追蹤進度。</li>
+                <li>在網站結帳：選寄送方式（7-11 交貨便或黑貓宅配）與付款方式（{payLabels}），送出後可在訂單頁追蹤進度。</li>
               )
             }
             <li>本店不會傳任何連結要求你「簽署金流」或「驗證帳戶」，遇到請直接封鎖。</li>
