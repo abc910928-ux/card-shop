@@ -165,7 +165,7 @@ export async function mockCall<T>(method: string, path: string, body?: unknown):
     Object.assign(me, body);
     return done({ ...me, isAdmin: true });
   }
-  if (route === "orders" && method === "GET") return done(db.orders.filter((o) => o.lineUserId === ME).map(out).reverse());
+  if (route === "orders" && method === "GET") return done(db.orders.filter((o) => o.lineUserId === ME && !o.archived).map(out).reverse());
   if (route === "orders" && method === "POST") {
     const o = body as NewOrder;
     if (o.kind === "preorder" && me.preorderBlocked) throw new ApiError(403, "你的帳號目前無法預購，請 LINE 聯絡我們");
@@ -217,8 +217,10 @@ export async function mockCall<T>(method: string, path: string, body?: unknown):
     return done({ ok: true });
   }
   if (route === "admin/orders" && method === "GET") {
+    const showArchived = path.includes("archived=1");
     return done(
       db.orders
+        .filter((o) => !!o.archived === showArchived)
         .map((o) => {
           const p = o.lineUserId ? db.profiles[o.lineUserId] : null;
           return { ...out(o), ...(p ? { member: { displayName: p.displayName, realName: p.realName, phone: p.phone } } : {}) };
@@ -251,6 +253,10 @@ export async function mockCall<T>(method: string, path: string, body?: unknown):
       const base = o.items.reduce((s, i) => s + i.price * i.qty, 0) + (o.shipping ? o.shipping.fee + (o.shipping.insuranceFee ?? 0) : 0) + (o.payment?.fee ?? 0);
       o.adjustments = adj;
       o.total = base + adj.reduce((s, x) => s + x.amount, 0);
+    }
+    if (typeof p2.archived === "boolean") {
+      if (p2.archived && !CANCELLED.includes(o.status)) throw new ApiError(409, "請先取消訂單再封存");
+      o.archived = p2.archived;
     }
     if (p2.addReceipt) o.receipts = [...(o.receipts ?? []), entry(p2.addReceipt)];
     if (typeof p2.removeReceipt === "number") o.receipts = (o.receipts ?? []).filter((_, i) => i !== p2.removeReceipt);

@@ -97,15 +97,17 @@ function Orders({ onToast }: { onToast: (s: string) => void }) {
   const [cancelling, setCancelling] = useState<Order | null>(null);
   const [shipping, setShipping] = useState<Order | null>(null);
   const [amountFor, setAmountFor] = useState<Order | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = () =>
     api.admin
-      .orders()
+      .orders(showArchived)
       .then(setOrders)
       .catch((e) => setError(e instanceof Error ? e.message : "讀取失敗"));
   useEffect(() => {
+    setOrders(null);
     load();
-  }, []);
+  }, [showArchived]);
 
   const inStage = (o: Order, id: string) => id === "all" || !!STAGES.find((s) => s.id === id)?.match(o);
 
@@ -194,6 +196,10 @@ function Orders({ onToast }: { onToast: (s: string) => void }) {
         <button onClick={load} class="text-sm text-muted underline underline-offset-2 hover:text-ink">
           重新整理
         </button>
+        <label class="flex cursor-pointer items-center gap-1.5 text-sm text-muted">
+          <input type="checkbox" checked={showArchived} onChange={() => setShowArchived(!showArchived)} class="accent-ink" />
+          只看已封存
+        </label>
       </div>
 
       {counts.overdue > 0 && (
@@ -218,6 +224,10 @@ function Orders({ onToast }: { onToast: (s: string) => void }) {
               onRevert={(to) => update(o, { status: to, reason: "退回上一步" }, `${o.code} 已退回「${statusLabel[to]}」`)}
               onNote={(note) => update(o, { note }, "備註已儲存")}
               onAmount={() => setAmountFor(o)}
+              onArchive={async (archived) => {
+                const ok = await update(o, { archived }, archived ? `${o.code} 已封存` : `${o.code} 已取消封存`);
+                if (ok) setOrders((list) => list?.filter((x) => x.id !== o.id) ?? null);
+              }}
               onRemoveEntry={(kind, i) =>
                 confirm(kind === "adj" ? "刪除這筆金額調整？" : "刪除這筆收款紀錄？") &&
                 update(o, kind === "adj" ? { removeAdjustment: i } : { removeReceipt: i }, "已刪除")
@@ -274,6 +284,7 @@ function OrderCard({
   onNote,
   onAmount,
   onRemoveEntry,
+  onArchive,
 }: {
   o: Order;
   onNext: (to: OrderStatus, label: string) => void;
@@ -283,6 +294,7 @@ function OrderCard({
   onNote: (note: string) => void;
   onAmount: () => void;
   onRemoveEntry: (kind: "adj" | "rec", index: number) => void;
+  onArchive: (archived: boolean) => void;
 }) {
   const [note, setNote] = useState(o.note ?? "");
   const [open, setOpen] = useState(false);
@@ -433,6 +445,18 @@ function OrderCard({
           </button>
         )}
         {cancelled && (
+          <button
+            onClick={() =>
+              o.archived
+                ? onArchive(false)
+                : confirm(`封存 ${o.code}？訂單會從列表收起（資料保留，勾「只看已封存」可以找回）。`) && onArchive(true)
+            }
+            class="rounded-lg border border-line px-3 py-2 text-sm text-muted hover:border-ink hover:text-ink"
+          >
+            {o.archived ? "取消封存" : "封存"}
+          </button>
+        )}
+        {cancelled && !o.archived && (
           <button
             onClick={() => confirm(`把 ${o.code} 復原成「${statusLabel[restoreTo]}」？會重新占用庫存。`) && onRestore(restoreTo)}
             class="rounded-lg border border-line px-3 py-2 text-sm hover:border-ink"

@@ -314,6 +314,7 @@ const orderOut = (r: Row) => ({
   note: r.note,
   tracking: r.tracking,
   guest: r.guest,
+  archived: !!r.archived,
   history: r.status_history ?? [],
   holdsStock: holdsStock(r),
   createdAt: r.created_at,
@@ -432,7 +433,7 @@ async function handle(req: Request): Promise<unknown> {
   // ── 訂單 ──
   if (route === "orders" && m === "GET") {
     const rows = check(
-      await db.from("orders").select().eq("line_user_id", line.userId).order("created_at", { ascending: false }).limit(100),
+      await db.from("orders").select().eq("line_user_id", line.userId).eq("archived", false).order("created_at", { ascending: false }).limit(100),
     );
     return rows.map(orderOut);
   }
@@ -474,7 +475,12 @@ async function handle(req: Request): Promise<unknown> {
 
     if (route === "admin/orders" && m === "GET") {
       const rows = check(
-        await db.from("orders").select("*, profiles(display_name, real_name, phone)").order("created_at", { ascending: false }).limit(500),
+        await db
+          .from("orders")
+          .select("*, profiles(display_name, real_name, phone)")
+          .eq("archived", url.searchParams.get("archived") === "1")
+          .order("created_at", { ascending: false })
+          .limit(500),
       );
       return rows.map(orderOut);
     }
@@ -494,6 +500,11 @@ async function handle(req: Request): Promise<unknown> {
         if (body.status === "arrived") patch.arrived_at = new Date().toISOString();
       }
       if (body.note !== undefined) patch.note = str(body.note, 300);
+      // 封存：只有已取消類的訂單可以封存（不占庫存），資料保留、可取消封存
+      if (typeof body.archived === "boolean" && body.archived !== !!o.archived) {
+        if (body.archived && !INACTIVE.includes(patch.status ?? o.status)) throw new HttpError(409, "請先取消訂單再封存");
+        patch.archived = body.archived;
+      }
       if (body.tracking !== undefined) patch.tracking = str(body.tracking, 60);
       // 調整金額／記錄收款（新增或刪除一筆）
       const entry = (b: Row, min: number) => ({

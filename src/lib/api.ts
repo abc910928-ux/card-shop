@@ -54,6 +54,7 @@ export type OrderPatch = {
   removeAdjustment?: number;
   addReceipt?: { amount: number; note: string };
   removeReceipt?: number;
+  archived?: boolean;
 };
 
 export const api = {
@@ -79,7 +80,7 @@ export const api = {
   removeWish: (productId: string) => call<{ ok: true }>("DELETE", `/wishlist/${encodeURIComponent(productId)}`),
 
   admin: {
-    orders: () => call<Order[]>("GET", "/admin/orders"),
+    orders: (archived = false) => call<Order[]>("GET", `/admin/orders${archived ? "?archived=1" : ""}`),
     updateOrder: (id: number, patch: OrderPatch) => call<Order>("PATCH", `/admin/orders/${id}`, patch),
     members: () => call<Member[]>("GET", "/admin/members"),
     updateMember: (lineUserId: string, patch: { preorderBlocked: boolean }) =>

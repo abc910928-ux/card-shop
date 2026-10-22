@@ -452,6 +452,11 @@ export default function CartApp({ products }: { products: ProductView[] }) {
             <div class={`text-right text-xs ${q.coverCap < goods ? "text-sale" : "text-muted"}`}>
               遺失最高理賠 {ntd(q.coverCap)}
             </div>
+            {q.coverCap < goods && (
+              <p class="text-right text-[11px] leading-relaxed text-sale">
+                保價低於商品金額：包裹遺失時，退款以物流實際理賠金額為上限
+              </p>
+            )}
           </dl>
           {preorder && (
             <label class="mt-3 flex cursor-pointer gap-2.5 rounded-lg border border-line p-3 text-xs leading-relaxed">

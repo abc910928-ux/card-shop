@@ -92,6 +92,7 @@ export type Order = {
   note: string | null;
   tracking: string | null;
   guest: boolean;
+  archived?: boolean; // 已封存（從後台列表收起，資料保留）
   history: HistoryEntry[];
   holdsStock: boolean; // 目前是否占用庫存（待確認超過 24 小時未確認的現貨訂單會釋出）
   createdAt: string;
